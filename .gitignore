@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Environment & Databases
+.env
+*.db
+*.sqlite3
+
+# Logs & Cache
+*.log
+.pytest_cache/
+__pycache__/
+.DS_Store
