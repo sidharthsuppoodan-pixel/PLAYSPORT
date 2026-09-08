@@ -15,7 +15,8 @@ class SlotCreate(SlotBase):
     pass
 
 class SlotBatchGenerate(BaseModel):
-    ground_id: int
+    turf_id: Optional[int] = None
+    ground_id: Optional[int] = None
     start_date: str
     end_date: str
     start_time_hour: int = 6  # 6 AM

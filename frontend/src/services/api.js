@@ -40,6 +40,7 @@ export const authAPI = {
 
 export const turfsAPI = {
   getAll: (params) => api.get('/turfs', { params }),
+  getMyTurfs: () => api.get('/turfs/my-turfs'),
   getPopular: (limit = 6) => api.get('/turfs/popular', { params: { limit } }),
   getByIdOrSlug: (idOrSlug) => api.get(`/turfs/${idOrSlug}`),
   create: (turfData) => api.post('/turfs', turfData),

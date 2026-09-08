@@ -34,12 +34,13 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
 
   const [newMatch, setNewMatch] = useState({
     turf_id: 1,
-    title: '',
+    title: '5v5 Football Open Match',
     sport_type: 'Football',
+    match_format: '5v5',
     skill_level: 'Casual / Intermediate',
     match_date: new Date().toISOString().split('T')[0],
-    start_time: '07:00 PM',
-    end_time: '08:00 PM',
+    start_time: '18:00',
+    end_time: '19:00',
     max_players: 10,
     price_per_player: 150,
     rules: 'Bring turf shoes. Water provided. Fair play expected.'
@@ -53,6 +54,9 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
       ]);
       setMatches(mRes.data);
       setTurfs(tRes.data);
+      if (tRes.data?.length > 0 && !newMatch.turf_id) {
+        setNewMatch(prev => ({ ...prev, turf_id: tRes.data[0].id }));
+      }
     } catch (err) {
       console.error("Fetch matches error", err);
     } finally {
@@ -128,9 +132,27 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
     }
 
     try {
-      await openMatchesAPI.create(newMatch);
+      const selectedTurfId = Number(newMatch.turf_id) || (turfs[0]?.id || 1);
+      const sportName = newMatch.sport_type || 'Football';
+      const formatVariant = newMatch.match_format || (sportName === 'Cricket' ? 'Box Cricket' : '5v5');
+
+      const payload = {
+        turf_id: selectedTurfId,
+        title: newMatch.title || `${formatVariant} ${sportName} Open Match`,
+        sport_type: `${sportName} (${formatVariant})`,
+        skill_level: newMatch.skill_level || 'Casual / Intermediate',
+        match_date: newMatch.match_date,
+        start_time: newMatch.start_time,
+        end_time: newMatch.end_time,
+        max_players: Number(newMatch.max_players) || 10,
+        price_per_player: Number(newMatch.price_per_player) || 150,
+        rules: newMatch.rules || 'Bring turf shoes. Water provided.',
+        description: 'Casual open match.'
+      };
+
+      await openMatchesAPI.create(payload);
       setShowCreateModal(false);
-      setSuccessMsg("Open match created successfully!");
+      setSuccessMsg("Open match created & time slot reserved successfully!");
       fetchMatches();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
@@ -200,6 +222,7 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
             const isFull = m.current_players >= m.max_players || m.status === 'FULL';
             const alreadyJoined = user && m.participants?.some(p => p.user_id === user.id);
             const isCreator = user && m.creator_id === user.id;
+            const isCricket = m.sport_type?.toLowerCase().includes('cricket');
 
             return (
               <div
@@ -209,22 +232,42 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
                 <div className="space-y-3.5">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-xl shrink-0">
-                        {m.sport_type?.toLowerCase().includes('cricket') ? '🏏' :
-                         m.sport_type?.toLowerCase().includes('badminton') ? '🏸' : '⚽'}
+                      <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 relative">
+                        <img
+                          src={m.turf_image || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80'}
+                          alt={m.turf_name}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-900 text-sm">{m.title}</h3>
-                        <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 text-slate-400" />
-                          {m.turf_name}, {m.turf_city}
+                        <p className="text-[11px] font-semibold text-brand-700 flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 text-brand-600" />
+                          {m.turf_name} ({m.turf_city})
                         </p>
                       </div>
                     </div>
 
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
-                      {m.skill_level}
-                    </span>
+                    {/* Small Sport Image Badge */}
+                    {isCricket ? (
+                      <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shrink-0">
+                        <img
+                          src="https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=120&q=80"
+                          alt="Cricket"
+                          className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                        />
+                        <span>Cricket</span>
+                      </div>
+                    ) : (
+                      <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1 shrink-0">
+                        <img
+                          src="https://images.unsplash.com/photo-1614632537190-23e4146777db?auto=format&fit=crop&w=120&q=80"
+                          alt="Football"
+                          className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                        />
+                        <span>Football</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Date & Time pill */}
@@ -424,7 +467,7 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
       {/* Host Match Modal (Turf Owners Only) */}
       {showCreateModal && canHostMatch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-md relative fade-in">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-md relative fade-in max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setShowCreateModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
@@ -433,27 +476,15 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
             </button>
 
             <h3 className="text-base font-bold text-slate-900 mb-1">Host an Open Match</h3>
-            <p className="text-xs text-slate-500 mb-4">Set game rules, player capacity, and split slot costs.</p>
+            <p className="text-xs text-slate-500 mb-4">Host a match for individual players. Creating reserves the time slot.</p>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Match Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 5v5 Friday Night Kickoff"
-                  value={newMatch.title}
-                  onChange={(e) => setNewMatch({ ...newMatch, title: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-
+            <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Select Turf Venue</label>
                 <select
-                  value={newMatch.turf_id}
-                  onChange={(e) => setNewMatch({ ...newMatch, turf_id: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg bg-white"
+                  value={newMatch.turf_id || (turfs[0]?.id || '')}
+                  onChange={(e) => setNewMatch(prev => ({ ...prev, turf_id: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
                 >
                   {turfs.map(t => (
                     <option key={t.id} value={t.id}>{t.name} ({t.city})</option>
@@ -463,39 +494,135 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Sport</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Sport Facility</label>
                   <select
                     value={newMatch.sport_type}
-                    onChange={(e) => setNewMatch({ ...newMatch, sport_type: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg bg-white"
+                    onChange={(e) => {
+                      const sport = e.target.value;
+                      const defaultFmt = sport === 'Cricket' ? 'Box Cricket' : '5v5';
+                      const defaultCap = sport === 'Cricket' ? 12 : 10;
+                      setNewMatch(prev => ({
+                        ...prev,
+                        sport_type: sport,
+                        match_format: defaultFmt,
+                        max_players: defaultCap,
+                        title: `${defaultFmt} ${sport} Open Match`
+                      }));
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg bg-white font-semibold text-slate-800"
                   >
-                    <option value="Football">Football</option>
-                    <option value="Cricket">Cricket</option>
-                    <option value="Badminton">Badminton</option>
+                    <option value="Football">⚽ Football</option>
+                    <option value="Cricket">🏏 Cricket</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Max Players</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Match Format / Size</label>
+                  <select
+                    value={newMatch.match_format || '5v5'}
+                    onChange={(e) => {
+                      const fmt = e.target.value;
+                      let cap = 10;
+                      if (fmt === '5v5') cap = 10;
+                      else if (fmt === '7v7') cap = 14;
+                      else if (fmt === '11v11') cap = 22;
+                      else if (fmt === 'Box Cricket' || fmt === '6v6') cap = 12;
+                      else if (fmt === '8v8') cap = 16;
+                      
+                      setNewMatch(prev => ({
+                        ...prev,
+                        match_format: fmt,
+                        max_players: cap,
+                        title: `${fmt} ${prev.sport_type} Open Match`
+                      }));
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
+                  >
+                    {newMatch.sport_type === 'Cricket' ? (
+                      <>
+                        <option value="Box Cricket">Box Cricket (12 Players)</option>
+                        <option value="6v6">6v6 Cricket (12 Players)</option>
+                        <option value="8v8">8v8 Cricket (16 Players)</option>
+                        <option value="11v11">11v11 Full Pitch Cricket (22 Players)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="5v5">5v5 Football (10 Players)</option>
+                        <option value="7v7">7v7 Football (14 Players)</option>
+                        <option value="11v11">11v11 Full Pitch Football (22 Players)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Match Title</label>
+                <input
+                  type="text"
+                  required
+                  value={newMatch.title}
+                  onChange={(e) => setNewMatch({ ...newMatch, title: e.target.value })}
+                  placeholder="e.g. 5v5 Friday Night Kickoff"
+                  className="w-full px-3 py-2 border rounded-lg font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Match Date</label>
                   <input
-                    type="number"
-                    min="2"
-                    max="30"
+                    type="date"
                     required
-                    value={newMatch.max_players}
-                    onChange={(e) => setNewMatch({ ...newMatch, max_players: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={newMatch.match_date}
+                    onChange={(e) => setNewMatch({ ...newMatch, match_date: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg font-medium"
                   />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Time Slot (1 Hour)</label>
+                  <select
+                    value={newMatch.start_time}
+                    onChange={(e) => {
+                      const st = e.target.value;
+                      const hr = parseInt(st.split(':')[0], 10);
+                      const nextHr = (hr + 1) % 24;
+                      const endStr = `${nextHr < 10 ? '0' : ''}${nextHr}:00`;
+                      setNewMatch(prev => ({ ...prev, start_time: st, end_time: endStr }));
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg bg-white font-medium"
+                  >
+                    {[...Array(18)].map((_, idx) => {
+                      const h = idx + 6; // 6 AM to 11 PM
+                      const stStr = `${h < 10 ? '0' : ''}${h}:00`;
+                      const endH = h + 1;
+                      const dispStr = `${h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h-12} PM`} - ${endH < 12 ? `${endH} AM` : endH === 12 ? '12 PM' : `${endH-12} PM`}`;
+
+                      const isToday = newMatch.match_date === new Date().toISOString().split('T')[0];
+                      const curHr = new Date().getHours();
+                      const isPast = isToday && h <= curHr;
+
+                      return (
+                        <option key={h} value={stStr} disabled={isPast}>
+                          {dispStr} {isPast ? '(Passed)' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Date</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Max Players Capacity</label>
                   <input
-                    type="date"
+                    type="number"
+                    min="2"
+                    max="50"
                     required
-                    value={newMatch.match_date}
-                    onChange={(e) => setNewMatch({ ...newMatch, match_date: e.target.value })}
+                    value={newMatch.max_players}
+                    onChange={(e) => setNewMatch({ ...newMatch, max_players: Number(e.target.value) })}
                     className="w-full px-3 py-2 border rounded-lg"
                   />
                 </div>
@@ -510,6 +637,13 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
                     className="w-full px-3 py-2 border rounded-lg"
                   />
                 </div>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                <p className="font-bold text-slate-800 flex items-center gap-1">
+                  📌 Automatic Slot Reservation:
+                </p>
+                <p>Creating this match will set slot status to <strong className="text-rose-600">BOOKED</strong> so regular customers cannot double-book this time.</p>
               </div>
 
               <button

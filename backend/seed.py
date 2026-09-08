@@ -70,6 +70,32 @@ def seed_database():
             is_verified=True,
             is_approved=True
         )
+        owner3 = User(
+            email="mahimanoj11@gmail.com",
+            username="mahimanoj",
+            full_name="Mahi Manoj",
+            phone="9876500011",
+            business_name="Mahi Sports Turf",
+            city="Kochi",
+            hashed_password=get_password_hash("Owner@123"),
+            role=RoleEnum.OWNER,
+            is_active=True,
+            is_verified=True,
+            is_approved=True
+        )
+        owner4 = User(
+            email="edson11@gmail.com",
+            username="edson11",
+            full_name="Edson",
+            phone="9876500022",
+            business_name="Edson Arena",
+            city="Kochi",
+            hashed_password=get_password_hash("Owner@123"),
+            role=RoleEnum.OWNER,
+            is_active=True,
+            is_verified=True,
+            is_approved=True
+        )
         db.add_all([owner1, owner2])
 
         # 3. Pending Turf Owners (Matching Stitch Admin Panel)
@@ -79,7 +105,7 @@ def seed_database():
             full_name="Ramesh Kumar",
             phone="9811099887",
             business_name="Metro Sports Complex",
-            city="New Delhi",
+            city="Ernakulam",
             hashed_password=get_password_hash("Owner@123"),
             role=RoleEnum.OWNER,
             is_active=True,
@@ -92,7 +118,7 @@ def seed_database():
             full_name="Anita Desai",
             phone="9822011223",
             business_name="Green Valley Turf",
-            city="Mumbai",
+            city="Malappuram",
             hashed_password=get_password_hash("Owner@123"),
             role=RoleEnum.OWNER,
             is_active=True,
@@ -105,7 +131,7 @@ def seed_database():
             full_name="Vikram Singh",
             phone="9833044556",
             business_name="Downtown Arena",
-            city="Bangalore",
+            city="Kozhikode",
             hashed_password=get_password_hash("Owner@123"),
             role=RoleEnum.OWNER,
             is_active=True,
@@ -259,11 +285,11 @@ def seed_database():
             owner_id=admin.id,
             name="Skyline Sports",
             slug="skyline-sports",
-            description="Rooftop panoramic sports arena in Bangalore with scenic skyline views, international turf carpet, and cafe lounge.",
-            address="80 Feet Road, Koramangala 4th Block, Bangalore",
-            city="Bangalore",
-            state="Karnataka",
-            pincode="560034",
+            description="Rooftop panoramic sports arena in Kozhikode with scenic skyline views, international turf carpet, and cafe lounge.",
+            address="Mavoor Road, Kozhikode, Kerala",
+            city="Kozhikode",
+            state="Kerala",
+            pincode="673001",
             rating=4.9,
             review_count=210,
             starting_price=1800.0,

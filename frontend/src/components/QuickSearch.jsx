@@ -56,9 +56,12 @@ const QuickSearch = () => {
             >
               <option value="Kochi">Kochi</option>
               <option value="Thiruvananthapuram">Thiruvananthapuram</option>
-              <option value="Bangalore">Bangalore</option>
-              <option value="New Delhi">New Delhi</option>
-              <option value="Mumbai">Mumbai</option>
+              <option value="Kozhikode">Kozhikode</option>
+              <option value="Malappuram">Malappuram</option>
+              <option value="Thrissur">Thrissur</option>
+              <option value="Kannur">Kannur</option>
+              <option value="Kottayam">Kottayam</option>
+              <option value="Ernakulam">Ernakulam</option>
               <option value="All Locations">All Locations</option>
             </select>
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />

@@ -208,7 +208,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
         {/* Big Hero Image on Left */}
         <div className="lg:col-span-8 rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-slate-100 h-64 sm:h-80 lg:h-full">
           <img
-            src={turf.images?.[0] || 'https://images.unsplash.com/photo-1529900245534-47fbf028b18a?auto=format&fit=crop&w=1200&q=80'}
+            src={turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80'}
             alt="Main Arena Night Shot"
             className="w-full h-full object-cover"
           />
@@ -444,7 +444,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
                 Select Slots
               </label>
               
-              {activeDateGroup ? (
+              {activeDateGroup && activeDateGroup.slots.length > 0 ? (
                 <div className="grid grid-cols-3 gap-2">
                   {activeDateGroup.slots.map((slot) => {
                     const isBooked = slot.status === 'BOOKED' || slot.status === 'BLOCKED';
@@ -469,7 +469,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
                   })}
                 </div>
               ) : (
-                <div className="text-xs text-slate-400 py-4 text-center">No slots available for this date.</div>
+                <div className="text-xs text-slate-400 py-4 text-center">No upcoming available slots for this date.</div>
               )}
             </div>
 

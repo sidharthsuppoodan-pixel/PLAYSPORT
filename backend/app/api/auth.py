@@ -73,7 +73,7 @@ def register_turf_owner(owner_in: OwnerRegister, db: Session = Depends(get_db)):
         role=RoleEnum.OWNER,
         is_active=True,
         is_verified=True,
-        is_approved=False  # Must be approved by Super Admin before login
+        is_approved=False  # Must be verified & approved by Super Admin with registration details
     )
     db.add(new_owner)
     db.commit()

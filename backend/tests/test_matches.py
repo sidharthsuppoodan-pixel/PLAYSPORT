@@ -5,12 +5,16 @@ from app.main import app
 client = TestClient(app)
 
 def test_open_match_capacity_guard():
-    # Login customer 1
+    # Login owner to create match
     login1 = client.post("/api/auth/login", json={
-        "email": "arjun.nair@example.com",
-        "password": "Customer@123"
+        "email": "owner.kochi@playsport.com",
+        "password": "Owner@123"
     })
     headers1 = {"Authorization": f"Bearer {login1.json()['access_token']}"}
+
+    import uuid
+    unique_date = "2026-11-15"
+    unique_time = f"{10 + (int(uuid.uuid4().hex[:2], 16) % 10)}:00"
 
     # 1. Create a match with max_players = 2
     match_payload = {
@@ -19,14 +23,14 @@ def test_open_match_capacity_guard():
         "title": "Strict 2-Player Test Match",
         "sport_type": "Badminton",
         "skill_level": "Intermediate",
-        "match_date": "2026-10-20",
-        "start_time": "06:00 PM",
-        "end_time": "07:00 PM",
+        "match_date": unique_date,
+        "start_time": unique_time,
+        "end_time": "12:00",
         "max_players": 2, # Only 2 players allowed (Creator + 1 joiner)
         "price_per_player": 100.0
     }
     create_res = client.post("/api/open-matches", json=match_payload, headers=headers1)
-    assert create_res.status_code == 201
+    assert create_res.status_code == 201, f"Failed to create test match: {create_res.text}"
     match_id = create_res.json()["id"]
 
     # 2. Login customer 2 and join (fills the 2nd slot -> match becomes FULL)

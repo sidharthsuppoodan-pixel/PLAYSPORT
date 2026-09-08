@@ -3,7 +3,24 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { X, Lock, Mail, User, Phone, Building, AlertCircle, CheckCircle2, Eye, EyeOff, AtSign, MapPin } from 'lucide-react';
 
-// ─── Validation Rules ────────────────────────────────────────────────────────
+// ─── Kerala Districts & Validation Rules ────────────────────────────────────
+
+export const KERALA_DISTRICTS = [
+  "Thiruvananthapuram",
+  "Kollam",
+  "Pathanamthitta",
+  "Alappuzha",
+  "Kottayam",
+  "Idukki",
+  "Ernakulam",
+  "Thrissur",
+  "Palakkad",
+  "Malappuram",
+  "Kozhikode",
+  "Wayanad",
+  "Kannur",
+  "Kasaragod"
+];
 
 const VALIDATORS = {
   full_name: (v) => {
@@ -21,9 +38,10 @@ const VALIDATORS = {
     return '';
   },
   email: (v) => {
-    if (!v.trim()) return 'Email is required.';
-    if (!/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(v.trim())) {
-      return 'Enter a valid email address (e.g. name@gmail.com).';
+    if (!v || !v.trim()) return 'Email is required.';
+    if (/[A-Z]/.test(v)) return 'Email address cannot contain uppercase letters (must be strictly lowercase).';
+    if (!/^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/.test(v.trim())) {
+      return 'Enter a valid lowercase email address (e.g. name@gmail.com).';
     }
     return '';
   },
@@ -55,10 +73,7 @@ const VALIDATORS = {
     return '';
   },
   city: (v) => {
-    if (!v.trim()) return 'City is required.';
-    if (v.trim().length < 2) return 'City must be at least 2 characters.';
-    if (v.trim().length > 100) return 'City must be under 100 characters.';
-    if (!/^[a-zA-Z\s\-/]+$/.test(v.trim())) return 'City name can only contain letters, spaces, or hyphens.';
+    if (!v || !v.trim()) return 'Please select a Kerala district.';
     return '';
   },
 };
@@ -66,7 +81,7 @@ const VALIDATORS = {
 const FIELDS_BY_MODE = {
   register: ['full_name', 'username', 'email', 'phone', 'password', 'confirmPassword'],
   owner_register: ['full_name', 'username', 'email', 'phone', 'password', 'confirmPassword', 'business_name', 'city'],
-  login: [],
+  login: ['email'],
 };
 
 const getPasswordStrength = (password) => {
@@ -93,7 +108,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '', password: '', confirmPassword: '', full_name: '', username: '',
-    phone: '', business_name: '', city: 'Kochi',
+    phone: '', business_name: '', city: '',
   });
   const [fieldErrors, setFieldErrors] = useState({});
   const [touched, setTouched] = useState({});
@@ -104,7 +119,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
   const resetForm = () => {
     setFormData({
       email: '', password: '', confirmPassword: '', full_name: '', username: '',
-      phone: '', business_name: '', city: 'Kochi',
+      phone: '', business_name: '', city: '',
     });
     setFieldErrors({});
     setTouched({});
@@ -142,13 +157,15 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     let nextValue = value;
-    if (name === 'phone') {
+    if (name === 'full_name') {
+      nextValue = value.toUpperCase();
+    } else if (name === 'phone') {
       nextValue = value.replace(/\D/g, '').slice(0, 10);
     }
     const updatedForm = { ...formData, [name]: nextValue };
     setFormData(updatedForm);
     setError('');
-    if (touched[name]) {
+    if (touched[name] || name === 'email') {
       setFieldErrors((prev) => ({ ...prev, [name]: validateField(name, nextValue, updatedForm) }));
     }
   };
@@ -173,14 +190,14 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
       setFormData((prev) => ({ ...prev, email: 'owner.kochi@playsport.com', password: 'Owner@123' }));
     } else {
       setIsAdminLogin(false);
-      setFormData((prev) => ({ ...prev, email: 'edson11@gmail.com', password: 'Customer@123' }));
+      setFormData((prev) => ({ ...prev, email: 'arjun.nair@example.com', password: 'Customer@123' }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (mode !== 'login' && !validateAll()) {
-      setError('Please fix the highlighted errors before submitting.');
+    if (!validateAll()) {
+      setError('Please fix the highlighted validation errors before submitting.');
       return;
     }
     setLoading(true); setError(''); setSuccessMsg('');
@@ -208,7 +225,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
         await register({
           email: formData.email.trim(),
           username: cleanUsername,
-          full_name: formData.full_name.trim(),
+          full_name: formData.full_name.trim().toUpperCase(),
           phone: formData.phone.trim(),
           password: formData.password,
         });
@@ -223,7 +240,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
         const resData = await registerOwner({
           email: formData.email.trim(),
           username: cleanUsername,
-          full_name: formData.full_name.trim(),
+          full_name: formData.full_name.trim().toUpperCase(),
           phone: formData.phone.trim(),
           password: formData.password,
           business_name: formData.business_name.trim(),
@@ -381,17 +398,26 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
                   <FieldFeedback name="business_name" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">City / Region <span className="text-rose-500">*</span></label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Select District / City <span className="text-rose-500">*</span></label>
                   <div className="relative">
-                    <input type="text" name="city" value={formData.city}
-                      onChange={handleChange} onBlur={handleBlur}
-                      placeholder="e.g. Kochi / Bangalore"
-                      autoComplete="off"
-                      className={`w-full pl-9 pr-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 bg-slate-50/50 transition ${
+                    <select
+                      name="city"
+                      value={formData.city}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      className={`w-full pl-9 pr-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 bg-white transition font-medium text-slate-800 cursor-pointer ${
                         touched.city && fieldErrors.city ? 'border-rose-400 focus:ring-rose-300'
-                        : touched.city && !fieldErrors.city ? 'border-emerald-400 focus:ring-emerald-300'
-                        : 'border-slate-200 focus:ring-brand-500'}`} />
-                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                        : touched.city && !fieldErrors.city && formData.city ? 'border-emerald-400 focus:ring-emerald-300'
+                        : 'border-slate-200 focus:ring-brand-500'}`}
+                    >
+                      <option value="">-- Select District in Kerala --</option>
+                      {KERALA_DISTRICTS.map((dist) => (
+                        <option key={dist} value={dist}>
+                          {dist}
+                        </option>
+                      ))}
+                    </select>
+                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
                   </div>
                   <FieldFeedback name="city" />
                 </div>
@@ -408,7 +434,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
                   autoComplete={mode === 'login' ? 'email' : 'off'} />
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               </div>
-              {mode !== 'login' && <FieldFeedback name="email" />}
+              <FieldFeedback name="email" />
             </div>
 
             {/* Phone */}

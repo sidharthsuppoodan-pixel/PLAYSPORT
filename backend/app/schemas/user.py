@@ -11,6 +11,14 @@ class UserBase(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100)
     phone: Optional[str] = Field(None)
 
+    @field_validator("email")
+    @classmethod
+    def validate_strict_email(cls, v):
+        v_str = str(v)
+        if re.search(r"[A-Z]", v_str):
+            raise ValueError("Email address cannot contain uppercase letters (must be strictly lowercase).")
+        return v
+
     @field_validator("username")
     @classmethod
     def validate_username(cls, v):
@@ -36,7 +44,7 @@ class UserBase(BaseModel):
     def validate_full_name(cls, v):
         if not re.match(r"^[a-zA-Z\s'.'\-]+$", v.strip()):
             raise ValueError("Full name can only contain letters, spaces, and apostrophes.")
-        return v.strip()
+        return v.strip().upper()
 
 
 class UserCreate(UserBase):
@@ -88,6 +96,14 @@ class OwnerRegister(UserBase):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_strict_login_email(cls, v):
+        v_str = str(v)
+        if re.search(r"[A-Z]", v_str):
+            raise ValueError("Email address cannot contain uppercase letters (must be strictly lowercase).")
+        return v
 
 
 class Token(BaseModel):

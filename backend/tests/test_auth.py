@@ -18,7 +18,7 @@ def test_admin_login():
     data = response.json()
     assert "access_token" in data
     assert data["user"]["role"] == "ADMIN"
-    assert data["user"]["full_name"] == "Alex Admin"
+    assert data["user"]["full_name"] == "ALEX ADMIN"
 
 def test_customer_login():
     response = client.post("/api/auth/login", json={
@@ -45,9 +45,11 @@ def test_customer_registration():
         "username": f"testuser_{rand}",
         "full_name": "Test Athlete",
         "phone": "9876500000",
-        "password": "SecurePassword123"
+        "password": "SecurePassword123!"
     })
     assert response.status_code == 201
     data = response.json()
     assert "access_token" in data
     assert data["user"]["username"] == f"testuser_{rand}"
+    assert data["user"]["full_name"] == "TEST ATHLETE"
+

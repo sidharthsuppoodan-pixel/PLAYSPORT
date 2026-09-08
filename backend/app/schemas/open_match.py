@@ -38,6 +38,7 @@ class OpenMatchOut(OpenMatchBase):
     status: MatchStatusEnum
     turf_name: str
     turf_city: str
+    turf_image: Optional[str] = None
     slots_left: int
     created_at: datetime
     participants: List[MatchParticipantOut] = []

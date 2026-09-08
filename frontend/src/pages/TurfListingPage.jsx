@@ -82,9 +82,12 @@ const TurfListingPage = () => {
             <option value="All">All Cities</option>
             <option value="Kochi">Kochi</option>
             <option value="Thiruvananthapuram">Thiruvananthapuram</option>
-            <option value="Bangalore">Bangalore</option>
-            <option value="New Delhi">New Delhi</option>
-            <option value="Mumbai">Mumbai</option>
+            <option value="Kozhikode">Kozhikode</option>
+            <option value="Malappuram">Malappuram</option>
+            <option value="Thrissur">Thrissur</option>
+            <option value="Kannur">Kannur</option>
+            <option value="Kottayam">Kottayam</option>
+            <option value="Ernakulam">Ernakulam</option>
           </select>
         </div>
 
@@ -121,7 +124,7 @@ const TurfListingPage = () => {
               <div>
                 <div className="relative aspect-[16/10] overflow-hidden bg-slate-100">
                   <img
-                    src={turf.images?.[0] || 'https://images.unsplash.com/photo-1529900245534-47fbf028b18a?auto=format&fit=crop&w=800&q=80'}
+                    src={turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80'}
                     alt={turf.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />

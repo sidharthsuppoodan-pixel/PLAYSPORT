@@ -900,27 +900,29 @@ const AdminDashboardPage = () => {
                     {pendingOwners.length === 0 ? (
                       <p className="text-xs text-slate-500 py-4 text-center">No pending owner approvals.</p>
                     ) : pendingOwners.map((owner) => (
-                      <div key={owner.id} className="pt-3 first:pt-0 space-y-2">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="text-xs font-bold text-slate-900">{owner.business_name}</h4>
-                            <p className="text-[11px] text-slate-500">{owner.owner_name}</p>
-                            <span className="text-[10px] text-slate-400 flex items-center gap-0.5 mt-0.5">
-                              📍 {owner.city}
-                            </span>
+                      <div key={owner.id} className="pt-3 first:pt-0 space-y-2 border-b border-slate-100 last:border-0 pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-extrabold text-slate-900">{owner.business_name}</h4>
+                            <p className="text-[11px] font-semibold text-slate-700">👤 {owner.owner_name}</p>
+                            <div className="text-[10px] text-slate-500 space-y-0.5">
+                              <p>✉️ <span className="font-mono">{owner.email}</span></p>
+                              <p>📞 <span>{owner.phone || 'N/A'}</span> • 📍 <span>{owner.city}</span></p>
+                              <p className="text-[9px] text-slate-400">Submitted: {owner.formatted_date}</p>
+                            </div>
                           </div>
 
-                          {/* Action Buttons: Approve (Green) & Reject (Outline) */}
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Action Buttons: Approve & Reject */}
+                          <div className="flex flex-col gap-1.5 shrink-0">
                             <button
                               onClick={() => handleApprove(owner.id, owner.business_name)}
-                              className="px-2.5 py-1 bg-brand-700 hover:bg-brand-800 text-white text-[11px] font-bold rounded-md shadow-2xs transition flex items-center gap-1"
+                              className="px-2.5 py-1 bg-brand-700 hover:bg-brand-800 text-white text-[11px] font-bold rounded-md shadow-2xs transition flex items-center justify-center gap-1"
                             >
                               <Check className="w-3 h-3" /> Approve
                             </button>
                             <button
                               onClick={() => handleReject(owner.id, owner.business_name)}
-                              className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-semibold rounded-md transition flex items-center gap-1"
+                              className="px-2.5 py-1 bg-white hover:bg-rose-50 border border-slate-200 text-rose-600 hover:border-rose-200 text-[11px] font-semibold rounded-md transition flex items-center justify-center gap-1"
                             >
                               <X className="w-3 h-3" /> Reject
                             </button>

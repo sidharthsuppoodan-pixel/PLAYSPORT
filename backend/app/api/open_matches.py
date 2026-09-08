@@ -1,20 +1,34 @@
 from typing import List, Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.security import get_current_user, require_owner_or_admin
+from app.core.security import get_current_user, require_owner_or_admin, get_optional_current_user
 from app.models.open_match import OpenMatch, MatchParticipant, MatchStatusEnum
 from app.models.turf import Turf
-from app.models.user import User
+from app.models.user import User, RoleEnum
 from app.models.notification import Notification, NotificationTypeEnum
 from app.schemas.open_match import OpenMatchCreate, OpenMatchOut, MatchParticipantOut
 
 router = APIRouter(prefix="/open-matches", tags=["Open Match Arena"])
 
+def parse_slot_time_to_datetime(date_str: str, time_str: str) -> Optional[datetime]:
+    """Combines YYYY-MM-DD date_str and time_str into a Python datetime object."""
+    if not date_str or not time_str:
+        return None
+    time_str = time_str.strip()
+    for fmt in ("%Y-%m-%d %I:%M %p", "%Y-%m-%d %I:%M%p", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(f"{date_str} {time_str}", fmt)
+        except ValueError:
+            pass
+    return None
+
 @router.get("", response_model=List[OpenMatchOut])
 def list_open_matches(
     sport: Optional[str] = Query(None),
     status_filter: Optional[str] = Query(None),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(OpenMatch)
@@ -25,9 +39,25 @@ def list_open_matches(
     
     matches = query.order_by(OpenMatch.match_date.asc(), OpenMatch.start_time.asc()).all()
     results = []
+    now = datetime.now()
+
     for m in matches:
-        turf = db.query(Turf).filter(Turf.id == m.turf_id).first()
         participants = db.query(MatchParticipant).filter(MatchParticipant.match_id == m.id).all()
+
+        # Check if match start time has already passed
+        match_start_dt = parse_slot_time_to_datetime(m.match_date, m.start_time)
+        if match_start_dt and match_start_dt <= now:
+            # Hide expired matches from users who have NOT joined or hosted it
+            is_user_participant = False
+            if current_user:
+                is_user_participant = (
+                    m.creator_id == current_user.id or
+                    any(p.user_id == current_user.id for p in participants)
+                )
+            if not is_user_participant:
+                continue
+
+        turf = db.query(Turf).filter(Turf.id == m.turf_id).first()
         part_outs = []
         for p in participants:
             u = db.query(User).filter(User.id == p.user_id).first()
@@ -60,6 +90,7 @@ def list_open_matches(
             description=m.description,
             turf_name=turf.name if turf else "PlayZone Arena",
             turf_city=turf.city if turf else "Kochi",
+            turf_image=turf.images[0] if (turf and turf.images and len(turf.images) > 0) else None,
             slots_left=slots_left,
             created_at=m.created_at,
             creator_id=m.creator_id,
@@ -73,13 +104,95 @@ def create_open_match(
     current_user: User = Depends(require_owner_or_admin),
     db: Session = Depends(get_db)
 ):
+    now = datetime.now()
+
+    # Reject hosting/creating open match for past date or time
+    match_start_dt = parse_slot_time_to_datetime(match_in.match_date, match_in.start_time)
+    if match_start_dt and match_start_dt <= now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot host or create an open match for a date and time that has already passed."
+        )
+
+    today_str = now.strftime("%Y-%m-%d")
+    if match_in.match_date < today_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot host an open match for a past date."
+        )
+
     turf = db.query(Turf).filter(Turf.id == match_in.turf_id).first()
     if not turf:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turf not found")
 
+    if current_user.role != RoleEnum.ADMIN and turf.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only host open matches for your own turf.")
+
+    # Resolve or create default Ground for Turf
+    from app.models.ground import Ground
+    ground = db.query(Ground).filter(Ground.turf_id == turf.id).first()
+    if not ground:
+        ground = Ground(
+            turf_id=turf.id,
+            name="Main Ground",
+            sport_type="Football",
+            ground_size="5v5",
+            hourly_rate=turf.starting_price,
+            is_active=True
+        )
+        db.add(ground)
+        db.flush()
+
+    # Check if an open match is already hosted for this turf at the exact same date and start_time
+    existing_match = db.query(OpenMatch).filter(
+        OpenMatch.turf_id == turf.id,
+        OpenMatch.match_date == match_in.match_date,
+        OpenMatch.start_time == match_in.start_time,
+        OpenMatch.status != MatchStatusEnum.CANCELLED
+    ).first()
+    if existing_match:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"An open match ('{existing_match.title}') is already hosted at this turf on {match_in.match_date} at {match_in.start_time}."
+        )
+
+    # Check slot availability & reserve slot
+    from app.models.slot import TimeSlot, SlotStatusEnum
+    slot = db.query(TimeSlot).filter(
+        TimeSlot.ground_id == ground.id,
+        TimeSlot.slot_date == match_in.match_date,
+        TimeSlot.start_time == match_in.start_time
+    ).first()
+
+    if slot:
+        if slot.status == SlotStatusEnum.BOOKED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This time slot is ALREADY BOOKED by a customer! You cannot host an open match during a booked time slot."
+            )
+        elif slot.status in [SlotStatusEnum.BLOCKED, SlotStatusEnum.MAINTENANCE]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This time slot is blocked for maintenance or unavailable."
+            )
+        else:
+            # Mark the slot as BOOKED so regular customers can no longer book it separately
+            slot.status = SlotStatusEnum.BOOKED
+    else:
+        # Create a new slot marked as BOOKED to reserve it for this open match
+        new_slot = TimeSlot(
+            ground_id=ground.id,
+            slot_date=match_in.match_date,
+            start_time=match_in.start_time,
+            end_time=match_in.end_time,
+            price=turf.starting_price,
+            status=SlotStatusEnum.BOOKED
+        )
+        db.add(new_slot)
+
     new_match = OpenMatch(
         turf_id=match_in.turf_id,
-        ground_id=match_in.ground_id,
+        ground_id=ground.id,
         creator_id=current_user.id,
         title=match_in.title,
         sport_type=match_in.sport_type,
@@ -126,6 +239,7 @@ def create_open_match(
         description=new_match.description,
         turf_name=turf.name,
         turf_city=turf.city,
+        turf_image=turf.images[0] if (turf and turf.images and len(turf.images) > 0) else None,
         slots_left=new_match.max_players - 1,
         created_at=new_match.created_at,
         creator_id=new_match.creator_id,
