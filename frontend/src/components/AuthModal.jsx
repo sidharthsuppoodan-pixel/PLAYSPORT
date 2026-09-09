@@ -103,7 +103,6 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState(initialMode);
-  const [isAdminLogin, setIsAdminLogin] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -195,19 +194,6 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
     resetForm();
   };
 
-  const handleFillDemo = (type) => {
-    if (type === 'admin') {
-      setIsAdminLogin(true);
-      setFormData((prev) => ({ ...prev, email: 'admin@playsport.com', password: 'Admin@123' }));
-    } else if (type === 'owner') {
-      setIsAdminLogin(false);
-      setFormData((prev) => ({ ...prev, email: 'owner.kochi@playsport.com', password: 'Owner@123' }));
-    } else {
-      setIsAdminLogin(false);
-      setFormData((prev) => ({ ...prev, email: 'arjun.nair@example.com', password: 'Customer@123' }));
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateAll()) {
@@ -221,9 +207,9 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
         .replace(/[^a-zA-Z0-9_]/g, '_');
 
       if (mode === 'login') {
-        const loggedUser = await login(formData.email.trim(), formData.password, isAdminLogin);
+        const loggedUser = await login(formData.email.trim(), formData.password);
         onClose();
-        if (loggedUser?.role === 'ADMIN' || isAdminLogin) {
+        if (loggedUser?.role === 'ADMIN') {
           navigate('/admin/dashboard');
         } else if (loggedUser?.role === 'OWNER') {
           navigate('/owner/dashboard');
@@ -352,21 +338,6 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
               {mode === 'owner_register' && 'Submit application for admin approval to list your turf.'}
             </p>
           </div>
-
-          {/* Demo autofill */}
-          {mode === 'login' && (
-            <div className="mb-4 p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-between text-[11px]">
-              <span className="text-slate-500 font-medium">Demo Autofill:</span>
-              <div className="flex gap-1.5">
-                {[['customer','Customer','bg-white hover:bg-slate-100 border-slate-200 text-slate-700'],
-                  ['owner','Owner','bg-white hover:bg-slate-100 border-slate-200 text-brand-700'],
-                  ['admin','Admin','bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700']].map(([t,lbl,cls]) => (
-                  <button key={t} type="button" onClick={() => handleFillDemo(t)}
-                    className={`px-2 py-0.5 rounded border font-semibold ${cls}`}>{lbl}</button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Banners */}
           {error && (
@@ -634,16 +605,10 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
               </div>
             )}
 
-            {/* Admin checkbox */}
+            {/* Forgot Password link */}
             {mode === 'login' && (
-              <div className="flex items-center justify-between text-xs pt-1">
-                <label className="flex items-center gap-2 cursor-pointer text-slate-600">
-                  <input type="checkbox" checked={isAdminLogin}
-                    onChange={(e) => setIsAdminLogin(e.target.checked)}
-                    className="rounded text-brand-600 focus:ring-brand-500" />
-                  Sign in as Super Admin
-                </label>
-                <a href="#forgot" onClick={(e) => { e.preventDefault(); alert("Please use demo passwords: 'Admin@123', 'Owner@123', or 'Customer@123'."); }}
+              <div className="flex items-center justify-end text-xs pt-1">
+                <a href="#forgot" onClick={(e) => { e.preventDefault(); alert("Please use your registered password or contact support."); }}
                   className="text-brand-600 hover:text-brand-700 font-medium">Forgot Password?</a>
               </div>
             )}

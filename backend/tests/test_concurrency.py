@@ -29,7 +29,7 @@ def test_booking_and_double_booking_prevention():
     })
     owner_token = owner_login.json()["access_token"]
     owner_headers = {"Authorization": f"Bearer {owner_token}"}
-    future_date = (datetime.now() + timedelta(days=10)).strftime("%Y-%m-%d")
+    future_date = (datetime.now() + timedelta(days=13)).strftime("%Y-%m-%d")
     gen_res = client.post("/api/slots/batch-generate", json={
         "turf_id": 1,
         "ground_id": 1,
@@ -40,7 +40,7 @@ def test_booking_and_double_booking_prevention():
         "hourly_price": 1500.0
     }, headers=owner_headers)
     assert gen_res.status_code == 200, f"Batch generate failed: {gen_res.text}"
-    slots_res = client.get("/api/slots/by-ground/1?days=12")
+    slots_res = client.get("/api/slots/by-ground/1?days=14")
     assert slots_res.status_code == 200
     days_data = slots_res.json()
     

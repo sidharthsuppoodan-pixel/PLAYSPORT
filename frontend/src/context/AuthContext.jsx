@@ -28,10 +28,21 @@ export const AuthProvider = ({ children }) => {
     verifyUser();
   }, [token]);
 
-  const login = async (email, password, asAdmin = false) => {
-    const res = asAdmin 
-      ? await authAPI.adminLogin(email, password)
-      : await authAPI.login(email, password);
+  const login = async (email, password) => {
+    let res;
+    try {
+      res = await authAPI.login(email, password);
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        try {
+          res = await authAPI.adminLogin(email, password);
+        } catch (adminErr) {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
     
     const { access_token, user: userData } = res.data;
     setToken(access_token);
