@@ -328,7 +328,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
           {/* Header */}
           <div className="mb-5">
             <h3 className="text-lg font-bold text-slate-900">
-              {mode === 'login' && (isAdminLogin ? 'Super Admin Portal' : 'Welcome to PLAYSPORT')}
+              {mode === 'login' && 'Welcome to PLAYSPORT'}
               {mode === 'register' && 'Create Player Account'}
               {mode === 'owner_register' && 'Register Turf Facility'}
             </h3>
