@@ -988,11 +988,25 @@ const OwnerDashboardPage = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Start Date</label>
-                  <input type="date" required value={slotGenData.start_date} onChange={(e) => setSlotGenData({ ...slotGenData, start_date: e.target.value })} className="w-full px-3 py-2 border rounded-lg" />
+                  <input
+                    type="date"
+                    required
+                    min={new Date().toISOString().split('T')[0]}
+                    value={slotGenData.start_date}
+                    onChange={(e) => setSlotGenData({ ...slotGenData, start_date: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg font-medium"
+                  />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">End Date</label>
-                  <input type="date" required value={slotGenData.end_date} onChange={(e) => setSlotGenData({ ...slotGenData, end_date: e.target.value })} className="w-full px-3 py-2 border rounded-lg" />
+                  <input
+                    type="date"
+                    required
+                    min={slotGenData.start_date || new Date().toISOString().split('T')[0]}
+                    value={slotGenData.end_date}
+                    onChange={(e) => setSlotGenData({ ...slotGenData, end_date: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg font-medium"
+                  />
                 </div>
               </div>
 
@@ -1002,13 +1016,18 @@ const OwnerDashboardPage = () => {
                   <select
                     value={slotGenData.start_time_hour}
                     onChange={(e) => setSlotGenData({ ...slotGenData, start_time_hour: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg bg-white"
+                    className="w-full px-3 py-2 border rounded-lg bg-white font-medium"
                   >
-                    {[...Array(24)].map((_, h) => (
-                      <option key={h} value={h}>
-                        {h === 0 ? '12 AM (Midnight)' : h < 12 ? `${h} AM` : h === 12 ? '12 PM (Noon)' : `${h-12} PM`}
-                      </option>
-                    ))}
+                    {[...Array(24)].map((_, h) => {
+                      const isToday = slotGenData.start_date === new Date().toISOString().split('T')[0];
+                      const curHr = new Date().getHours();
+                      const isPast = isToday && h <= curHr;
+                      return (
+                        <option key={h} value={h} disabled={isPast}>
+                          {h === 0 ? '12 AM (Midnight)' : h < 12 ? `${h} AM` : h === 12 ? '12 PM (Noon)' : `${h-12} PM`} {isPast ? '(Passed)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -1016,13 +1035,16 @@ const OwnerDashboardPage = () => {
                   <select
                     value={slotGenData.end_time_hour}
                     onChange={(e) => setSlotGenData({ ...slotGenData, end_time_hour: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg bg-white"
+                    className="w-full px-3 py-2 border rounded-lg bg-white font-medium"
                   >
                     {[...Array(25)].slice(1).map((_, idx) => {
                       const h = idx + 1;
+                      const isToday = slotGenData.start_date === new Date().toISOString().split('T')[0];
+                      const curHr = new Date().getHours();
+                      const isPast = isToday && h <= curHr;
                       return (
-                        <option key={h} value={h}>
-                          {h === 24 ? '12 AM (End of day)' : h < 12 ? `${h} AM` : h === 12 ? '12 PM (Noon)' : `${h-12} PM`}
+                        <option key={h} value={h} disabled={isPast}>
+                          {h === 24 ? '12 AM (End of day)' : h < 12 ? `${h} AM` : h === 12 ? '12 PM (Noon)' : `${h-12} PM`} {isPast ? '(Passed)' : ''}
                         </option>
                       );
                     })}

@@ -79,13 +79,13 @@ def get_slots_by_ground(
             TimeSlot.slot_date == date_str
         ).order_by(TimeSlot.id.asc()).all()
         
-        # Filter out slots in the past if checking today
+        # Filter out slots in the past if checking today or past dates
         valid_slots = []
         for s in slots:
-            if i == 0:
-                st_dt = parse_slot_time_to_datetime(s.slot_date, s.start_time)
-                if st_dt and st_dt <= now:
-                    continue
+            st_dt = parse_slot_time_to_datetime(s.slot_date, s.start_time)
+            end_dt = parse_slot_time_to_datetime(s.slot_date, s.end_time)
+            if (st_dt and st_dt <= now) or (end_dt and end_dt <= now):
+                continue
             valid_slots.append(s)
 
         result.append(DateSlotsGroup(
@@ -148,7 +148,8 @@ def batch_generate_slots(
 
             # Don't create slots in the past
             st_dt_full = parse_slot_time_to_datetime(date_str, st_time)
-            if st_dt_full and st_dt_full <= now:
+            end_dt_full = parse_slot_time_to_datetime(date_str, end_time)
+            if (st_dt_full and st_dt_full <= now) or (end_dt_full and end_dt_full <= now):
                 continue
             
             existing = db.query(TimeSlot).filter(
