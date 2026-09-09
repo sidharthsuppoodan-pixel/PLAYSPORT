@@ -29,24 +29,27 @@ def test_booking_and_double_booking_prevention():
     })
     owner_token = owner_login.json()["access_token"]
     owner_headers = {"Authorization": f"Bearer {owner_token}"}
-    tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    client.post("/api/slots/batch-generate", json={
+    future_date = (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%d")
+    gen_res = client.post("/api/slots/batch-generate", json={
         "turf_id": 1,
-        "start_date": tomorrow_str,
-        "end_date": tomorrow_str,
+        "ground_id": 1,
+        "start_date": future_date,
+        "end_date": future_date,
         "start_time_hour": 14,
         "end_time_hour": 18,
         "hourly_price": 1500.0
     }, headers=owner_headers)
+    assert gen_res.status_code == 200, f"Batch generate failed: {gen_res.text}"
 
     # 3. Retrieve available slots for PlayZone Arena (turf id 1, ground id 1)
-    slots_res = client.get("/api/slots/by-ground/1?days=2")
+    slots_res = client.get("/api/slots/by-ground/1?days=7")
     assert slots_res.status_code == 200
     days_data = slots_res.json()
     
     # Pick a date with available slots
-    target_date = days_data[1]["date"] # Tomorrow
-    available_slots = [s for s in days_data[1]["slots"] if s["status"] == "AVAILABLE"]
+    target_group = next((d for d in days_data if d["date"] == future_date), days_data[0])
+    target_date = target_group["date"]
+    available_slots = [s for s in target_group["slots"] if s["status"] == "AVAILABLE"]
     assert len(available_slots) >= 1
     slot_to_book = available_slots[0]
 
