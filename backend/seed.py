@@ -317,87 +317,8 @@ def seed_database():
         db.add_all([g1, g2, g3, g4, g5, g6, g7])
         db.flush()
 
-        print("Seeding Time Slots...")
         today = datetime.now()
         today_str = today.strftime("%Y-%m-%d")
-        
-        # Generate 7 days of slots for PlayZone Arena Ground 1
-        hours = [
-            ("06:00 AM", "07:00 AM"), ("07:00 AM", "08:00 AM"), ("08:00 AM", "09:00 AM"),
-            ("09:00 AM", "10:00 AM"), ("10:00 AM", "11:00 AM"), ("11:00 AM", "12:00 PM"),
-            ("04:00 PM", "05:00 PM"), ("05:00 PM", "06:00 PM"), ("06:00 PM", "07:00 PM"),
-            ("07:00 PM", "08:00 PM"), ("08:00 PM", "09:00 PM"), ("09:00 PM", "10:00 PM"),
-        ]
-        
-        for d_offset in range(7):
-            cur_date = (today + timedelta(days=d_offset)).strftime("%Y-%m-%d")
-            for idx, (st, et) in enumerate(hours):
-                status = SlotStatusEnum.AVAILABLE
-                # Mark 11:00 AM and 08:00 PM booked on today to match screenshot
-                if d_offset == 0 and (st == "11:00 AM" or st == "08:00 PM"):
-                    status = SlotStatusEnum.BOOKED
-                
-                slot = TimeSlot(
-                    ground_id=g1.id,
-                    slot_date=cur_date,
-                    start_time=st,
-                    end_time=et,
-                    price=1200.0,
-                    status=status
-                )
-                db.add(slot)
-
-        print("Seeding Open Matches (Matching Stitch screenshot)...")
-        # Match 1: 5v5 Casual Knockout (Arena 54, 2/10 slots left)
-        match1 = OpenMatch(
-            turf_id=turf2.id,
-            ground_id=g5.id,
-            creator_id=customer1.id,
-            title="5v5 Casual Knockout",
-            sport_type="Football",
-            skill_level="Casual / Intermediate",
-            match_date=today_str,
-            start_time="07:00 PM",
-            end_time="08:00 PM",
-            max_players=10,
-            current_players=8, # 2 slots left!
-            price_per_player=150.0,
-            status=MatchStatusEnum.OPEN,
-            rules="Friendly competitive 5v5 game. Bibs and match ball provided.",
-            description="Looking for 2 more midfield/attack players to complete our teams!"
-        )
-        db.add(match1)
-        db.flush()
-
-        # Match 2: Weekend Box Cricket (GreenField Hub, 4/14 slots left)
-        tomorrow_str = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-        match2 = OpenMatch(
-            turf_id=turf3.id,
-            ground_id=g6.id,
-            creator_id=customer2.id,
-            title="Weekend Box Cricket",
-            sport_type="Cricket",
-            skill_level="All Levels",
-            match_date=tomorrow_str,
-            start_time="06:00 AM",
-            end_time="08:00 AM",
-            max_players=14,
-            current_players=10, # 4 slots left!
-            price_per_player=200.0,
-            status=MatchStatusEnum.OPEN,
-            rules="Tape ball box cricket, 6-over innings per side. Maximum fun!",
-            description="Morning energetic box cricket game. Bats & balls available."
-        )
-        db.add(match2)
-
-        # Participants for Match 1
-        db.add_all([
-            MatchParticipant(match_id=match1.id, user_id=customer1.id, team_slot="Team A"),
-            MatchParticipant(match_id=match1.id, user_id=customer2.id, team_slot="Team B"),
-            MatchParticipant(match_id=match1.id, user_id=customer3.id, team_slot="Team A"),
-            MatchParticipant(match_id=match1.id, user_id=customer4.id, team_slot="Team B"),
-            MatchParticipant(match_id=match1.id, user_id=customer5.id, team_slot="Team A"),
-        ])
 
         print("Seeding Tournaments...")
         tourn1 = Tournament(

@@ -366,3 +366,38 @@ def leave_open_match(
         "status": match.status.value
     }
 
+@router.delete("/{match_id}", response_model=dict)
+def delete_open_match(
+    match_id: int,
+    current_user: User = Depends(require_owner_or_admin),
+    db: Session = Depends(get_db)
+):
+    match = db.query(OpenMatch).filter(OpenMatch.id == match_id).first()
+    if not match:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+
+    turf = db.query(Turf).filter(Turf.id == match.turf_id).first()
+    if current_user.role != RoleEnum.ADMIN and (not turf or turf.owner_id != current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete open matches hosted for your own turf."
+        )
+
+    # Restore corresponding time slot if it exists
+    from app.models.slot import TimeSlot, SlotStatusEnum
+    if match.ground_id:
+        slot = db.query(TimeSlot).filter(
+            TimeSlot.ground_id == match.ground_id,
+            TimeSlot.slot_date == match.match_date,
+            TimeSlot.start_time == match.start_time
+        ).first()
+        if slot and slot.status == SlotStatusEnum.BOOKED:
+            slot.status = SlotStatusEnum.AVAILABLE
+
+    # Delete participants and match
+    db.query(MatchParticipant).filter(MatchParticipant.match_id == match.id).delete()
+    db.delete(match)
+    db.commit()
+
+    return {"message": "Open match deleted successfully and slot released."}
+

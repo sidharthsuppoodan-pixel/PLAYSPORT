@@ -23,7 +23,8 @@ import {
   Layers,
   Phone,
   MapPin,
-  Tag
+  Tag,
+  Trash2
 } from 'lucide-react';
 
 const PRESET_SPORTS_GEAR = [
@@ -70,9 +71,10 @@ const OwnerDashboardPage = () => {
   const [modalSuccess, setModalSuccess] = useState('');
   const [modalError, setModalError] = useState('');
 
-  // Modal display controls
   const [showManageSlotsModal, setShowManageSlotsModal] = useState(false);
   const [showCreateMatchModal, setShowCreateMatchModal] = useState(false);
+  const [confirmDeleteMatch, setConfirmDeleteMatch] = useState(null);
+  const [deletingMatchId, setDeletingMatchId] = useState(null);
   const [showCreateTournamentModal, setShowCreateTournamentModal] = useState(false);
   const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false);
   const [showEditTurfModal, setShowEditTurfModal] = useState(false);
@@ -245,6 +247,27 @@ const OwnerDashboardPage = () => {
     } catch (err) {
       console.error("Create match submit error:", err);
       setModalError(err.response?.data?.detail || "Failed to create match.");
+    }
+  };
+
+  const handleConfirmDeleteMatch = async () => {
+    if (!confirmDeleteMatch) return;
+    const matchId = confirmDeleteMatch.id;
+    setDeletingMatchId(matchId);
+    setModalError('');
+    setModalSuccess('');
+    try {
+      await openMatchesAPI.delete(matchId);
+      setModalSuccess("Open match deleted successfully and slot released!");
+      fetchDashboard();
+      setTimeout(() => setModalSuccess(''), 3000);
+    } catch (err) {
+      console.error("Delete match error", err);
+      setModalError(err.response?.data?.detail || "Could not delete open match.");
+      setTimeout(() => setModalError(''), 3000);
+    } finally {
+      setDeletingMatchId(null);
+      setConfirmDeleteMatch(null);
     }
   };
 
@@ -760,7 +783,12 @@ const OwnerDashboardPage = () => {
 
                     <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-medium">{m.slots_left} open spots remaining</span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">{m.skill_level}</span>
+                      <button
+                        onClick={() => setConfirmDeleteMatch(m)}
+                        className="py-1.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 transition flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete Open Match
+                      </button>
                     </div>
                   </div>
                 );
@@ -1419,6 +1447,48 @@ const OwnerDashboardPage = () => {
                 Save Turf Photo & Details
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 8: DELETE OPEN MATCH CONFIRMATION ──────────────────────────── */}
+      {confirmDeleteMatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-md relative fade-in space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-rose-500" /> Delete Open Match
+              </h3>
+              <button onClick={() => setConfirmDeleteMatch(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-rose-50 p-4 rounded-xl border border-rose-200/80 text-xs space-y-1">
+              <p className="font-bold text-rose-900">Are you sure you want to delete this open match?</p>
+              <p className="text-rose-700">
+                Match: <strong className="font-bold">{confirmDeleteMatch.title}</strong> ({confirmDeleteMatch.match_date} at {confirmDeleteMatch.start_time})
+              </p>
+              <p className="text-rose-600 text-[11px] pt-1">
+                This will cancel the match, remove all player registrations, and release the time slot back to available for customer booking.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={() => setConfirmDeleteMatch(null)}
+                className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteMatch}
+                disabled={deletingMatchId === confirmDeleteMatch.id}
+                className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+              >
+                {deletingMatchId === confirmDeleteMatch.id ? 'Deleting...' : 'Yes, Delete Match'}
+              </button>
+            </div>
           </div>
         </div>
       )}

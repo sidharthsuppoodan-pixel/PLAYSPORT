@@ -22,6 +22,23 @@ def test_booking_and_double_booking_prevention():
     token2 = login2.json()["access_token"]
     headers2 = {"Authorization": f"Bearer {token2}"}
 
+    # 0. Generate slots as owner for tomorrow
+    owner_login = client.post("/api/auth/login", json={
+        "email": "owner.kochi@playsport.com",
+        "password": "Owner@123"
+    })
+    owner_token = owner_login.json()["access_token"]
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    client.post("/api/slots/batch-generate", json={
+        "turf_id": 1,
+        "start_date": tomorrow_str,
+        "end_date": tomorrow_str,
+        "start_time_hour": 14,
+        "end_time_hour": 18,
+        "hourly_price": 1500.0
+    }, headers=owner_headers)
+
     # 3. Retrieve available slots for PlayZone Arena (turf id 1, ground id 1)
     slots_res = client.get("/api/slots/by-ground/1?days=2")
     assert slots_res.status_code == 200

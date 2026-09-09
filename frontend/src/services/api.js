@@ -69,6 +69,7 @@ export const openMatchesAPI = {
   create: (matchData) => api.post('/open-matches', matchData),
   join: (id) => api.post(`/open-matches/${id}/join`),
   leave: (id) => api.post(`/open-matches/${id}/leave`),
+  delete: (id) => api.delete(`/open-matches/${id}`),
 };
 
 export const tournamentsAPI = {
