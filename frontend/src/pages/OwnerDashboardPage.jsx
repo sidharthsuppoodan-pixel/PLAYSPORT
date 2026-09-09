@@ -1481,8 +1481,59 @@ const OwnerDashboardPage = () => {
                   value={editingTurf.address}
                   onChange={(e) => setEditingTurf({ ...editingTurf, address: e.target.value })}
                   placeholder="e.g. Kaloor Stadium Road, Ernakulam"
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg font-medium"
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  Sports Offered (Select Multiple)
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  {[
+                    { label: '⚽ Football (5v5)', val: 'Football (5v5)' },
+                    { label: '⚽ Football (7v7)', val: 'Football (7v7)' },
+                    { label: '🏏 Box Cricket', val: 'Box Cricket' },
+                    { label: '🏸 Badminton', val: 'Badminton' },
+                    { label: '🎾 Tennis', val: 'Tennis' },
+                    { label: '🏐 Volleyball', val: 'Volleyball' },
+                    { label: '🏀 Basketball', val: 'Basketball' }
+                  ].map((sport) => {
+                    const isSelected = (editingTurf.sports_supported || '').includes(sport.val);
+                    return (
+                      <button
+                        key={sport.val}
+                        type="button"
+                        onClick={() => {
+                          const currentList = editingTurf.sports_supported
+                            ? editingTurf.sports_supported.split(',').map(s => s.trim()).filter(Boolean)
+                            : ['Football (5v5)', 'Box Cricket'];
+
+                          let updatedList;
+                          if (currentList.includes(sport.val)) {
+                            updatedList = currentList.filter(s => s !== sport.val);
+                          } else {
+                            updatedList = [...currentList, sport.val];
+                          }
+                          setEditingTurf({ ...editingTurf, sports_supported: updatedList.join(', ') });
+                        }}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-between border ${
+                          isSelected
+                            ? 'bg-brand-700 text-white border-brand-700 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>{sport.label}</span>
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${isSelected ? 'bg-white text-brand-700 font-black' : 'border border-slate-300 text-transparent'}`}>
+                          ✓
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Selected: <strong className="text-brand-700 font-bold">{editingTurf.sports_supported || 'None selected'}</strong>
+                </p>
               </div>
 
               <div>
@@ -1634,37 +1685,68 @@ const OwnerDashboardPage = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Sports Offered *</label>
-                  <select
-                    value={newTurfData.sports_supported || 'Football (5v5), Box Cricket'}
-                    onChange={(e) => setNewTurfData({ ...newTurfData, sports_supported: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-800"
-                  >
-                    <option value="Football (5v5), Box Cricket">⚽ Football (5v5) & 🏏 Box Cricket</option>
-                    <option value="Football (5v5)">⚽ Football (5v5)</option>
-                    <option value="Football (7v7)">⚽ Football (7v7 Pitch)</option>
-                    <option value="Football (11v11)">⚽ Full Pitch Football (11v11)</option>
-                    <option value="Box Cricket">🏏 Box Cricket Stadium</option>
-                    <option value="5v5 Football, Cricket, Badminton">⚽ Football, 🏏 Cricket & 🏸 Badminton</option>
-                    <option value="Badminton & Tennis">🏸 Badminton & 🎾 Tennis Courts</option>
-                    <option value="Multi-sport Arena">🏟️ Multi-sport Arena</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  Select Sports Offered (Select Multiple) *
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  {[
+                    { label: '⚽ Football (5v5)', val: 'Football (5v5)' },
+                    { label: '⚽ Football (7v7)', val: 'Football (7v7)' },
+                    { label: '🏏 Box Cricket', val: 'Box Cricket' },
+                    { label: '🏸 Badminton', val: 'Badminton' },
+                    { label: '🎾 Tennis', val: 'Tennis' },
+                    { label: '🏐 Volleyball', val: 'Volleyball' },
+                    { label: '🏀 Basketball', val: 'Basketball' }
+                  ].map((sport) => {
+                    const isSelected = (newTurfData.sports_supported || '').includes(sport.val);
+                    return (
+                      <button
+                        key={sport.val}
+                        type="button"
+                        onClick={() => {
+                          const currentList = newTurfData.sports_supported
+                            ? newTurfData.sports_supported.split(',').map(s => s.trim()).filter(Boolean)
+                            : ['Football (5v5)', 'Box Cricket'];
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Price / Hour (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="100"
-                    placeholder="1200"
-                    value={newTurfData.starting_price}
-                    onChange={(e) => setNewTurfData({ ...newTurfData, starting_price: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
-                  />
+                          let updatedList;
+                          if (currentList.includes(sport.val)) {
+                            updatedList = currentList.filter(s => s !== sport.val);
+                          } else {
+                            updatedList = [...currentList, sport.val];
+                          }
+                          setNewTurfData({ ...newTurfData, sports_supported: updatedList.join(', ') });
+                        }}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-between border ${
+                          isSelected
+                            ? 'bg-brand-700 text-white border-brand-700 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>{sport.label}</span>
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${isSelected ? 'bg-white text-brand-700 font-black' : 'border border-slate-300 text-transparent'}`}>
+                          ✓
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Selected: <strong className="text-brand-700 font-bold">{newTurfData.sports_supported || 'None selected'}</strong>
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Price / Hour (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  min="100"
+                  placeholder="1200"
+                  value={newTurfData.starting_price}
+                  onChange={(e) => setNewTurfData({ ...newTurfData, starting_price: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
+                />
               </div>
 
               <div>
