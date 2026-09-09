@@ -12,20 +12,23 @@ def test_open_match_capacity_guard():
     })
     headers1 = {"Authorization": f"Bearer {login1.json()['access_token']}"}
 
-    import uuid
-    unique_date = "2026-11-15"
-    unique_time = f"{10 + (int(uuid.uuid4().hex[:2], 16) % 10)}:00"
+    import uuid, random
+    random_day = random.randint(10, 28)
+    unique_date = f"2026-11-{random_day}"
+    start_hr = 10 + (random.randint(0, 8))
+    unique_time = f"{start_hr:02d}:00"
+    end_time_str = f"{start_hr+1:02d}:00"
 
     # 1. Create a match with max_players = 2
     match_payload = {
         "turf_id": 1,
         "ground_id": 1,
-        "title": "Strict 2-Player Test Match",
+        "title": f"Strict 2-Player Test Match {uuid.uuid4().hex[:4]}",
         "sport_type": "Badminton",
         "skill_level": "Intermediate",
         "match_date": unique_date,
         "start_time": unique_time,
-        "end_time": "12:00",
+        "end_time": end_time_str,
         "max_players": 2, # Only 2 players allowed (Creator + 1 joiner)
         "price_per_player": 100.0
     }

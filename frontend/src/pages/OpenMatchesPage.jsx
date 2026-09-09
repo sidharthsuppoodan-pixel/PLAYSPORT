@@ -54,7 +54,15 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
       ]);
       setMatches(mRes.data);
       setTurfs(tRes.data);
-      if (tRes.data?.length > 0 && !newMatch.turf_id) {
+
+      if (isOwner) {
+        const myTurfsRes = await turfsAPI.getMyTurfs().catch(() => ({ data: [] }));
+        if (myTurfsRes.data && myTurfsRes.data.length > 0) {
+          setNewMatch(prev => ({ ...prev, turf_id: myTurfsRes.data[0].id }));
+        } else if (tRes.data?.length > 0 && !newMatch.turf_id) {
+          setNewMatch(prev => ({ ...prev, turf_id: tRes.data[0].id }));
+        }
+      } else if (tRes.data?.length > 0 && !newMatch.turf_id) {
         setNewMatch(prev => ({ ...prev, turf_id: tRes.data[0].id }));
       }
     } catch (err) {

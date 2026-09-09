@@ -78,6 +78,16 @@ const OwnerDashboardPage = () => {
   const [showCreateTournamentModal, setShowCreateTournamentModal] = useState(false);
   const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false);
   const [showEditTurfModal, setShowEditTurfModal] = useState(false);
+  const [showCreateTurfModal, setShowCreateTurfModal] = useState(false);
+  const [newTurfData, setNewTurfData] = useState({
+    name: '',
+    city: 'Kochi',
+    address: '',
+    starting_price: 1200,
+    sports_supported: 'Football (5v5), Box Cricket',
+    image_url: '',
+    description: ''
+  });
   const [editingTurf, setEditingTurf] = useState({
     id: '',
     name: '',
@@ -332,6 +342,48 @@ const OwnerDashboardPage = () => {
     }
   };
 
+  const handleCreateTurfSubmit = async (e) => {
+    e.preventDefault();
+    setModalError('');
+    setModalSuccess('');
+    try {
+      const payload = {
+        name: newTurfData.name,
+        description: newTurfData.description || `Premier sports turf arena located in ${newTurfData.city}.`,
+        address: newTurfData.address,
+        city: newTurfData.city,
+        state: "Kerala",
+        pincode: "682001",
+        starting_price: Number(newTurfData.starting_price) || 1200,
+        dimension_text: "6000 sq ft",
+        sports_supported: newTurfData.sports_supported || "Football (5v5), Box Cricket",
+        opening_time: "06:00 AM",
+        closing_time: "11:00 PM",
+        facilities: ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
+        images: newTurfData.image_url ? [newTurfData.image_url] : ["https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80"]
+      };
+      await turfsAPI.create(payload);
+      setModalSuccess("New turf registered & published successfully!");
+      fetchDashboard();
+      setTimeout(() => {
+        setModalSuccess('');
+        setShowCreateTurfModal(false);
+        setNewTurfData({
+          name: '',
+          city: 'Kochi',
+          address: '',
+          starting_price: 1200,
+          sports_supported: 'Football (5v5), Box Cricket',
+          image_url: '',
+          description: ''
+        });
+      }, 1400);
+    } catch (err) {
+      console.error("Create turf error:", err);
+      setModalError(err.response?.data?.detail || "Failed to create turf.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] flex">
       
@@ -583,7 +635,16 @@ const OwnerDashboardPage = () => {
         {activeTab === 'turfs' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Your Listed Turfs ({myTurfs.length})</h2>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Your Listed Turfs ({myTurfs.length})</h2>
+                <p className="text-xs text-slate-500">Manage your existing sports venues or register a new turf pitch.</p>
+              </div>
+              <button
+                onClick={() => setShowCreateTurfModal(true)}
+                className="py-2.5 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-700/20 transition flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Register New Turf
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1489,6 +1550,135 @@ const OwnerDashboardPage = () => {
                 {deletingMatchId === confirmDeleteMatch.id ? 'Deleting...' : 'Yes, Delete Match'}
               </button>
             </div>
+          </div>
+        </div>
+      {/* ─── MODAL 9: REGISTER NEW TURF ───────────────────────────────────────── */}
+      {showCreateTurfModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-md relative fade-in max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowCreateTurfModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-base font-bold text-slate-900 mb-1">Register New Turf Venue</h3>
+            <p className="text-xs text-slate-500 mb-4">Add a new sports turf facility to list for public booking.</p>
+
+            {modalSuccess && (
+              <div className="mb-3 p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-2 border border-emerald-200">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>{modalSuccess}</span>
+              </div>
+            )}
+
+            {modalError && (
+              <div className="mb-3 p-3 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-2 border border-rose-200">
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateTurfSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Turf / Facility Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Royal Arena & Sports Turf"
+                  value={newTurfData.name}
+                  onChange={(e) => setNewTurfData({ ...newTurfData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">City *</label>
+                  <select
+                    value={newTurfData.city}
+                    onChange={(e) => setNewTurfData({ ...newTurfData, city: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white font-medium"
+                  >
+                    <option value="Kochi">Kochi</option>
+                    <option value="Ernakulam">Ernakulam</option>
+                    <option value="Thiruvananthapuram">Thiruvananthapuram</option>
+                    <option value="Kozhikode">Kozhikode</option>
+                    <option value="Malappuram">Malappuram</option>
+                    <option value="Thrissur">Thrissur</option>
+                    <option value="Kannur">Kannur</option>
+                    <option value="Kottayam">Kottayam</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Starting Price / Hr (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="100"
+                    placeholder="1200"
+                    value={newTurfData.starting_price}
+                    onChange={(e) => setNewTurfData({ ...newTurfData, starting_price: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Full Address *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Near Stadium Junction, Palarivattom, Kochi"
+                  value={newTurfData.address}
+                  onChange={(e) => setNewTurfData({ ...newTurfData, address: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Sports Supported</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Football (5v5), Box Cricket, Badminton"
+                  value={newTurfData.sports_supported}
+                  onChange={(e) => setNewTurfData({ ...newTurfData, sports_supported: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Turf Cover Photo URL</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  value={newTurfData.image_url}
+                  onChange={(e) => setNewTurfData({ ...newTurfData, image_url: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium text-slate-700"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Leave empty to use default high quality sports turf photo.</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Facility Description</label>
+                <textarea
+                  rows="2"
+                  placeholder="Brief description of pitch quality, floodlights, parking, etc."
+                  value={newTurfData.description}
+                  onChange={(e) => setNewTurfData({ ...newTurfData, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
+                ></textarea>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full mt-3 py-2.5 bg-brand-700 hover:bg-brand-800 text-white font-bold rounded-xl shadow-sm transition"
+              >
+                Publish & List Turf
+              </button>
+            </form>
           </div>
         </div>
       )}

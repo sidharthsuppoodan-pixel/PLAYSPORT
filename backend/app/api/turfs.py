@@ -40,6 +40,14 @@ def list_turfs(
     
     return query.order_by(Turf.rating.desc(), Turf.created_at.desc()).limit(limit).all()
 
+@router.get("/popular", response_model=List[TurfOut])
+def get_popular_turfs(
+    limit: int = Query(6, ge=1, le=50),
+    db: Session = Depends(get_db)
+):
+    """Returns popular active turfs ordered by rating and newest creation."""
+    return db.query(Turf).filter(Turf.is_active == True).order_by(Turf.rating.desc(), Turf.created_at.desc()).limit(limit).all()
+
 @router.get("/my-turfs", response_model=List[TurfOut])
 def get_my_turfs(
     current_user: User = Depends(require_owner_or_admin),
