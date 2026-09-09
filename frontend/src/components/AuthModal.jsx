@@ -113,6 +113,8 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [pendingOwnerApp, setPendingOwnerApp] = useState(() => {
     try {
       const saved = localStorage.getItem('playsport_pending_owner_app');
