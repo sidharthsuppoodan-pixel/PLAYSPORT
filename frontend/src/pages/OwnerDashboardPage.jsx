@@ -376,21 +376,20 @@ const OwnerDashboardPage = () => {
         images: [finalImage]
       };
       await turfsAPI.create(payload);
-      setModalSuccess(`Turf "${assignedName}" registered & published successfully!`);
+      alert(`Waiting for Approval: Turf "${assignedName}" registered & submitted for approval!`);
+      setShowCreateTurfModal(false); // Close registration modal immediately after applying
+      setModalSuccess(`Waiting for Approval: Turf "${assignedName}" registered & submitted for approval!`);
       fetchDashboard();
-      setTimeout(() => {
-        setModalSuccess('');
-        setShowCreateTurfModal(false);
-        setNewTurfData({
-          name: '',
-          city: '',
-          address: '',
-          starting_price: 1200,
-          sports_supported: 'Football (5v5), Box Cricket',
-          image_url: '',
-          description: ''
-        });
-      }, 1400);
+      setNewTurfData({
+        name: '',
+        city: '',
+        address: '',
+        starting_price: 1200,
+        sports_supported: 'Football (5v5), Box Cricket',
+        image_url: '',
+        description: ''
+      });
+      setTimeout(() => setModalSuccess(''), 3000);
     } catch (err) {
       console.error("Create turf error:", err);
       setModalError(err.response?.data?.detail || "Failed to create turf.");
@@ -653,7 +652,13 @@ const OwnerDashboardPage = () => {
                 <p className="text-xs text-slate-500">Manage your existing sports venues or register a new turf pitch.</p>
               </div>
               <button
-                onClick={() => setShowCreateTurfModal(true)}
+                onClick={() => {
+                  if (myTurfs.length > 0) {
+                    alert("Waiting for Approval: You have already registered your turf facility. Your turf application is registered and active.");
+                    return;
+                  }
+                  setShowCreateTurfModal(true);
+                }}
                 className="py-2.5 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-700/20 transition flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" /> Register New Turf

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { X, Lock, Mail, User, Phone, Building, AlertCircle, CheckCircle2, Eye, EyeOff, AtSign, MapPin } from 'lucide-react';
+import { X, Lock, Mail, User, Phone, Building, AlertCircle, CheckCircle2, Eye, EyeOff, AtSign, MapPin, Clock } from 'lucide-react';
 
 // ─── Kerala Districts & Validation Rules ────────────────────────────────────
 
@@ -113,8 +113,14 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [pendingOwnerApp, setPendingOwnerApp] = useState(() => {
+    try {
+      const saved = localStorage.getItem('playsport_pending_owner_app');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
 
   const resetForm = () => {
     setFormData({
@@ -130,6 +136,12 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
   // Synchronize mode whenever modal opens or initialMode changes
   React.useEffect(() => {
     if (isOpen) {
+      try {
+        const saved = localStorage.getItem('playsport_pending_owner_app');
+        setPendingOwnerApp(saved ? JSON.parse(saved) : null);
+      } catch (e) {
+        setPendingOwnerApp(null);
+      }
       setMode(initialMode);
       resetForm();
     }
@@ -246,14 +258,30 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
           business_name: formData.business_name.trim(),
           city: formData.city.trim(),
         });
-        setSuccessMsg(resData.message || "Registration submitted! Your Turf Owner account is pending admin approval. You can log in once approved.");
+        
+        const pendingData = {
+          email: formData.email.trim(),
+          business_name: formData.business_name.trim(),
+          full_name: formData.full_name.trim().toUpperCase(),
+          city: formData.city.trim(),
+          submittedAt: new Date().toISOString()
+        };
+        try {
+          localStorage.setItem('playsport_pending_owner_app', JSON.stringify(pendingData));
+        } catch (e) {}
+        setPendingOwnerApp(pendingData);
+        
+        alert(`Waiting for Approval: Registration submitted successfully for "${formData.business_name.trim()}"! Your account is pending admin approval.`);
         resetForm();
+        onClose(); // Close the registration modal/page immediately
       }
     } catch (err) {
       if (err.response && err.response.data && err.response.data.detail) {
         const detail = err.response.data.detail;
         if (Array.isArray(detail)) {
           setError(detail.map(d => d.msg.replace('Value error, ', '')).join(', '));
+        } else if (typeof detail === 'string' && detail.toLowerCase().includes('pending admin approval')) {
+          setError("Waiting for Approval: Your Turf Owner registration application is pending admin approval. You can log in once approved.");
         } else {
           setError(detail);
         }
@@ -350,7 +378,79 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5" noValidate autoComplete="off">
+          {mode === 'owner_register' && pendingOwnerApp ? (
+            <div className="py-2 text-center space-y-4">
+              <div className="w-14 h-14 rounded-full bg-amber-50 border-2 border-amber-300 flex items-center justify-center mx-auto text-amber-600 shadow-xs">
+                <Clock className="w-7 h-7" />
+              </div>
+
+              <div className="space-y-1">
+                <span className="inline-block px-3 py-1 rounded-full bg-amber-100/80 text-amber-800 text-[10px] font-black uppercase tracking-wider border border-amber-200">
+                  Status: Waiting for Admin Approval
+                </span>
+                <h4 className="text-base font-extrabold text-slate-900 pt-1">
+                  Registration Application Submitted
+                </h4>
+                <p className="text-xs text-slate-600 max-w-sm mx-auto leading-relaxed">
+                  Your application for <strong className="text-slate-800">{pendingOwnerApp.business_name || pendingOwnerApp.email}</strong> has been submitted and is currently waiting for Admin approval.
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-[11px] text-slate-600 text-left space-y-1.5 font-medium">
+                <div className="flex justify-between border-b border-slate-200/60 pb-1">
+                  <span className="text-slate-400">Applicant:</span>
+                  <strong className="text-slate-800">{pendingOwnerApp.full_name || 'N/A'}</strong>
+                </div>
+                <div className="flex justify-between border-b border-slate-200/60 pb-1">
+                  <span className="text-slate-400">Turf / Business:</span>
+                  <strong className="text-slate-800">{pendingOwnerApp.business_name || 'N/A'}</strong>
+                </div>
+                <div className="flex justify-between border-b border-slate-200/60 pb-1">
+                  <span className="text-slate-400">District / City:</span>
+                  <strong className="text-slate-800">{pendingOwnerApp.city || 'N/A'}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Registered Email:</span>
+                  <strong className="text-slate-800">{pendingOwnerApp.email}</strong>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800 text-left flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>
+                  The registration form is closed while your application is under review. Once Super Admin approves your business details, you can log in.
+                </span>
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full py-2.5 bg-brand-700 hover:bg-brand-800 text-white font-bold rounded-xl text-xs shadow-sm transition"
+                >
+                  Close Registration Page
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode('login')}
+                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition"
+                >
+                  Sign In as Another User
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try { localStorage.removeItem('playsport_pending_owner_app'); } catch (e) {}
+                    setPendingOwnerApp(null);
+                  }}
+                  className="text-[11px] text-slate-400 hover:text-slate-600 underline pt-1 block mx-auto"
+                >
+                  Clear & Apply with New Email
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-3.5" noValidate autoComplete="off">
 
             {/* Full Name */}
             {mode !== 'login' && (
@@ -573,6 +673,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
               )}
             </div>
           </form>
+          )}
         </div>
       </div>
     </div>
