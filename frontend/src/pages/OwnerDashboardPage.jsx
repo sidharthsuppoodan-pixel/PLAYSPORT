@@ -347,11 +347,24 @@ const OwnerDashboardPage = () => {
     setModalError('');
     setModalSuccess('');
     try {
+      const assignedName = (user?.business_name && user.business_name.trim())
+        ? user.business_name.trim()
+        : (user?.full_name ? `${user.full_name}'s Sports Turf` : 'Sports Arena');
+
+      const assignedCity = (user?.city && user.city.trim())
+        ? user.city.trim()
+        : 'Kochi';
+
+      const defaultCoverPhoto = "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80";
+      const finalImage = (newTurfData.image_url && newTurfData.image_url.trim())
+        ? newTurfData.image_url.trim()
+        : defaultCoverPhoto;
+
       const payload = {
-        name: newTurfData.name,
-        description: newTurfData.description || `Premier sports turf arena located in ${newTurfData.city}.`,
-        address: newTurfData.address,
-        city: newTurfData.city,
+        name: assignedName,
+        description: newTurfData.description || `Premier sports turf arena located in ${assignedCity}.`,
+        address: newTurfData.address || `${assignedName}, ${assignedCity}`,
+        city: assignedCity,
         state: "Kerala",
         pincode: "682001",
         starting_price: Number(newTurfData.starting_price) || 1200,
@@ -360,17 +373,17 @@ const OwnerDashboardPage = () => {
         opening_time: "06:00 AM",
         closing_time: "11:00 PM",
         facilities: ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
-        images: newTurfData.image_url ? [newTurfData.image_url] : ["https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80"]
+        images: [finalImage]
       };
       await turfsAPI.create(payload);
-      setModalSuccess("New turf registered & published successfully!");
+      setModalSuccess(`Turf "${assignedName}" registered & published successfully!`);
       fetchDashboard();
       setTimeout(() => {
         setModalSuccess('');
         setShowCreateTurfModal(false);
         setNewTurfData({
           name: '',
-          city: 'Kochi',
+          city: '',
           address: '',
           starting_price: 1200,
           sports_supported: 'Football (5v5), Box Cricket',
@@ -1605,39 +1618,43 @@ const OwnerDashboardPage = () => {
             )}
 
             <form onSubmit={handleCreateTurfSubmit} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Turf / Facility Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Royal Arena & Sports Turf"
-                  value={newTurfData.name}
-                  onChange={(e) => setNewTurfData({ ...newTurfData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
-                />
+              {/* Registered Owner Info Display (Name & City from Approval/Registration) */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-500">Registered Turf Name:</span>
+                  <span className="text-xs font-bold text-slate-900 bg-white px-2.5 py-0.5 rounded border border-slate-200">
+                    {user?.business_name || (user?.full_name ? `${user.full_name}'s Arena` : 'Your Registered Turf')}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-500">Registered Location City:</span>
+                  <span className="text-xs font-bold text-brand-700 bg-white px-2.5 py-0.5 rounded border border-slate-200">
+                    📍 {user?.city || 'Kochi'}
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">City *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Sports Offered *</label>
                   <select
-                    value={newTurfData.city}
-                    onChange={(e) => setNewTurfData({ ...newTurfData, city: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white font-medium"
+                    value={newTurfData.sports_supported || 'Football (5v5), Box Cricket'}
+                    onChange={(e) => setNewTurfData({ ...newTurfData, sports_supported: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white font-medium text-slate-800"
                   >
-                    <option value="Kochi">Kochi</option>
-                    <option value="Ernakulam">Ernakulam</option>
-                    <option value="Thiruvananthapuram">Thiruvananthapuram</option>
-                    <option value="Kozhikode">Kozhikode</option>
-                    <option value="Malappuram">Malappuram</option>
-                    <option value="Thrissur">Thrissur</option>
-                    <option value="Kannur">Kannur</option>
-                    <option value="Kottayam">Kottayam</option>
+                    <option value="Football (5v5), Box Cricket">⚽ Football (5v5) & 🏏 Box Cricket</option>
+                    <option value="Football (5v5)">⚽ Football (5v5)</option>
+                    <option value="Football (7v7)">⚽ Football (7v7 Pitch)</option>
+                    <option value="Football (11v11)">⚽ Full Pitch Football (11v11)</option>
+                    <option value="Box Cricket">🏏 Box Cricket Stadium</option>
+                    <option value="5v5 Football, Cricket, Badminton">⚽ Football, 🏏 Cricket & 🏸 Badminton</option>
+                    <option value="Badminton & Tennis">🏸 Badminton & 🎾 Tennis Courts</option>
+                    <option value="Multi-sport Arena">🏟️ Multi-sport Arena</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Starting Price / Hr (₹) *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Price / Hour (₹) *</label>
                   <input
                     type="number"
                     required
@@ -1663,33 +1680,47 @@ const OwnerDashboardPage = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Sports Supported</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Football (5v5), Box Cricket, Badminton"
-                  value={newTurfData.sports_supported}
-                  onChange={(e) => setNewTurfData({ ...newTurfData, sports_supported: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Turf Cover Photo URL</label>
+                <label className="block font-semibold text-slate-700 mb-1">Add Cover Photo URL (Optional)</label>
                 <input
                   type="url"
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="https://images.unsplash.com/... (Leave blank for auto cover photo)"
                   value={newTurfData.image_url}
                   onChange={(e) => setNewTurfData({ ...newTurfData, image_url: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium text-slate-700"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Leave empty to use default high quality sports turf photo.</p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  💡 If left blank, an HD cover photo will be automatically chosen for your turf.
+                </p>
+
+                {/* Photo Presets */}
+                <div className="mt-2 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-600">Quick Select Cover Photo:</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { lbl: 'FIFA Floodlight Pitch', url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80' },
+                      { lbl: 'Box Cricket Stadium', url: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=800&q=80' },
+                      { lbl: 'Night Arena', url: 'https://images.unsplash.com/photo-1551958219-acbc608c6377?auto=format&fit=crop&w=800&q=80' },
+                      { lbl: 'GreenField Pitch', url: 'https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?auto=format&fit=crop&w=800&q=80' }
+                    ].map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setNewTurfData({ ...newTurfData, image_url: p.url })}
+                        className={`h-12 rounded-lg border overflow-hidden relative transition ${newTurfData.image_url === p.url ? 'ring-2 ring-brand-500 border-brand-500' : 'border-slate-200 opacity-70 hover:opacity-100'}`}
+                      >
+                        <img src={p.url} alt={p.lbl} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Facility Description</label>
+                <label className="block font-semibold text-slate-700 mb-1">Brief Description *</label>
                 <textarea
-                  rows="2"
-                  placeholder="Brief description of pitch quality, floodlights, parking, etc."
+                  rows="3"
+                  required
+                  placeholder="Provide a brief description of pitch quality, LED floodlights, parking, locker rooms, etc."
                   value={newTurfData.description}
                   onChange={(e) => setNewTurfData({ ...newTurfData, description: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium"
