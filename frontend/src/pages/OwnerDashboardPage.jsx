@@ -24,8 +24,36 @@ import {
   Phone,
   MapPin,
   Tag,
-  Trash2
+  Trash2,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
+
+export const isSupportedImage = (urlOrFileName) => {
+  if (!urlOrFileName || typeof urlOrFileName !== 'string') return false;
+  const lower = urlOrFileName.trim().toLowerCase();
+  
+  // Explicitly reject document file extensions
+  const forbiddenExts = ['.pdf', '.ppt', '.pptx', '.doc', '.docx', '.txt', '.xlsx', '.csv', '.zip', '.rar'];
+  if (forbiddenExts.some(ext => lower.endsWith(ext) || lower.includes(ext + '?'))) {
+    return false;
+  }
+  
+  // Allow data URIs starting with data:image/
+  if (lower.startsWith('data:image/')) return true;
+  
+  // Allow common web image extensions or standard image URLs
+  const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg'];
+  if (allowedExts.some(ext => lower.endsWith(ext) || lower.includes(ext + '?'))) return true;
+  
+  // Allow Unsplash, Imgur, Cloudinary, AWS S3 image links if HTTP/HTTPS
+  if ((lower.startsWith('http://') || lower.startsWith('https://')) && 
+      !lower.match(/\.(pdf|doc|docx|ppt|pptx|txt)$/i)) {
+    return true;
+  }
+  
+  return false;
+};
 
 const PRESET_SPORTS_GEAR = [
   { name: "FIFA Match Football (Size 5)", category: "Balls", defaultPrice: 100 },
@@ -320,6 +348,12 @@ const OwnerDashboardPage = () => {
     e.preventDefault();
     setModalError('');
     try {
+      if (editingTurf.image_url && editingTurf.image_url.trim()) {
+        if (!isSupportedImage(editingTurf.image_url.trim())) {
+          setModalError("Invalid image type! PDF, PPT, and DOC files are not supported. Only JPG, PNG, and WEBP image files are allowed.");
+          return;
+        }
+      }
       const payload = {
         name: editingTurf.name,
         city: editingTurf.city,
@@ -347,6 +381,13 @@ const OwnerDashboardPage = () => {
     setModalError('');
     setModalSuccess('');
     try {
+      if (newTurfData.image_url && newTurfData.image_url.trim()) {
+        if (!isSupportedImage(newTurfData.image_url.trim())) {
+          setModalError("Invalid image type! PDF, PPT, and DOC files are not supported. Only JPG, PNG, and WEBP image files are allowed.");
+          return;
+        }
+      }
+
       const assignedName = (user?.business_name && user.business_name.trim())
         ? user.business_name.trim()
         : (user?.full_name ? `${user.full_name}'s Sports Turf` : 'Sports Arena');
@@ -1542,18 +1583,66 @@ const OwnerDashboardPage = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Turf Photo URL</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Turf Cover Photo (JPG, PNG, WEBP only) *
+                </label>
+
+                {/* Local File Upload Button */}
+                <div className="mb-2">
+                  <label className="w-full cursor-pointer py-2 px-3 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 transition">
+                    <Upload className="w-4 h-4 text-brand-600" />
+                    <span>Upload Image File (.jpg, .png, .webp)</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!file.type.startsWith('image/')) {
+                          alert("Invalid file format! PDF, PPT, and DOC files are rejected. Only JPG, PNG, and WEBP image files are allowed.");
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setEditingTurf({ ...editingTurf, image_url: ev.target.result });
+                          setModalError('');
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                </div>
+
                 <input
-                  type="url"
+                  type="text"
                   required
                   value={editingTurf.image_url}
-                  onChange={(e) => setEditingTurf({ ...editingTurf, image_url: e.target.value })}
-                  placeholder="https://images.unsplash.com/..."
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val && !isSupportedImage(val)) {
+                      setModalError("Invalid image type! PDF, PPT, and DOC files are not allowed. Please enter a valid JPG, PNG, or WEBP photo URL.");
+                    } else {
+                      setModalError("");
+                    }
+                    setEditingTurf({ ...editingTurf, image_url: val });
+                  }}
+                  placeholder="Or paste HD image URL (https://...)"
                   className="w-full px-3 py-2 border rounded-lg font-mono text-[11px]"
                 />
                 
-                {/* Photo Preview & Presets */}
-                <div className="mt-2 space-y-1.5">
+                {/* Live Photo Preview */}
+                {editingTurf.image_url && isSupportedImage(editingTurf.image_url) && (
+                  <div className="mt-2.5 space-y-1">
+                    <p className="text-[11px] font-bold text-slate-600">Selected Cover Photo Preview:</p>
+                    <div className="h-36 w-full rounded-xl border-2 border-brand-300 overflow-hidden relative shadow-sm">
+                      <img src={editingTurf.image_url} alt="Live Cover Preview" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Photo Presets */}
+                <div className="mt-2.5 space-y-1.5">
                   <p className="text-[11px] font-semibold text-slate-600">Quick Photo Presets:</p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {[
@@ -1565,7 +1654,10 @@ const OwnerDashboardPage = () => {
                       <button
                         key={idx}
                         type="button"
-                        onClick={() => setEditingTurf({ ...editingTurf, image_url: p.url })}
+                        onClick={() => {
+                          setEditingTurf({ ...editingTurf, image_url: p.url });
+                          setModalError("");
+                        }}
                         className={`h-12 rounded-lg border overflow-hidden relative transition ${editingTurf.image_url === p.url ? 'ring-2 ring-brand-500 border-brand-500' : 'border-slate-200 opacity-70 hover:opacity-100'}`}
                       >
                         <img src={p.url} alt={p.lbl} className="w-full h-full object-cover" />
@@ -1573,15 +1665,6 @@ const OwnerDashboardPage = () => {
                     ))}
                   </div>
                 </div>
-
-                {editingTurf.image_url && (
-                  <div className="mt-2">
-                    <p className="text-[11px] font-semibold text-slate-600 mb-1">Live Photo Preview:</p>
-                    <div className="h-28 rounded-xl border border-slate-200 overflow-hidden relative">
-                      <img src={editingTurf.image_url} alt="Preview" className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div>
@@ -1767,20 +1850,68 @@ const OwnerDashboardPage = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Add Cover Photo URL (Optional)</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Add Cover Photo (JPG, PNG, WEBP only)
+                </label>
+
+                {/* Local File Upload Button */}
+                <div className="mb-2">
+                  <label className="w-full cursor-pointer py-2 px-3 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 transition">
+                    <Upload className="w-4 h-4 text-brand-600" />
+                    <span>Upload Image File (.jpg, .png, .webp)</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!file.type.startsWith('image/')) {
+                          alert("Invalid file format! PDF, PPT, and DOC files are rejected. Only JPG, PNG, and WEBP image files are allowed.");
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setNewTurfData({ ...newTurfData, image_url: ev.target.result });
+                          setModalError('');
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                </div>
+
                 <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/... (Leave blank for auto cover photo)"
+                  type="text"
+                  placeholder="Or paste HD cover photo URL (https://...)"
                   value={newTurfData.image_url}
-                  onChange={(e) => setNewTurfData({ ...newTurfData, image_url: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium text-slate-700"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val && !isSupportedImage(val)) {
+                      setModalError("Invalid image type! PDF, PPT, and DOC files are not supported. Only JPG/PNG images are allowed.");
+                    } else {
+                      setModalError("");
+                    }
+                    setNewTurfData({ ...newTurfData, image_url: val });
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium text-slate-700 text-xs"
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
-                  💡 If left blank, an HD cover photo will be automatically chosen for your turf.
+                  💡 Document files (PDF, PPT, DOC) are rejected. If left blank, an HD cover photo will be chosen.
                 </p>
 
+                {/* Live Cover Photo Preview */}
+                {newTurfData.image_url && isSupportedImage(newTurfData.image_url) && (
+                  <div className="mt-2.5 space-y-1">
+                    <p className="text-[11px] font-bold text-slate-600">Selected Cover Photo Preview:</p>
+                    <div className="h-36 w-full rounded-xl border-2 border-brand-300 overflow-hidden relative shadow-sm">
+                      <img src={newTurfData.image_url} alt="Cover Preview" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                )}
+
                 {/* Photo Presets */}
-                <div className="mt-2 space-y-1">
+                <div className="mt-2.5 space-y-1">
                   <p className="text-[10px] font-bold text-slate-600">Quick Select Cover Photo:</p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {[
@@ -1792,7 +1923,10 @@ const OwnerDashboardPage = () => {
                       <button
                         key={idx}
                         type="button"
-                        onClick={() => setNewTurfData({ ...newTurfData, image_url: p.url })}
+                        onClick={() => {
+                          setNewTurfData({ ...newTurfData, image_url: p.url });
+                          setModalError("");
+                        }}
                         className={`h-12 rounded-lg border overflow-hidden relative transition ${newTurfData.image_url === p.url ? 'ring-2 ring-brand-500 border-brand-500' : 'border-slate-200 opacity-70 hover:opacity-100'}`}
                       >
                         <img src={p.url} alt={p.lbl} className="w-full h-full object-cover" />

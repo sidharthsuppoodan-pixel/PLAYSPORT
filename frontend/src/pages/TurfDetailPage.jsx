@@ -204,7 +204,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
       </div>
 
       {/* Main Turf Cover Image Banner */}
-      <div className="w-full rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-slate-100 h-64 sm:h-80 lg:h-[380px]">
+      <div className="w-full rounded-3xl overflow-hidden shadow-md border border-slate-200 bg-slate-100 h-64 sm:h-80 md:h-[420px] relative">
         <img
           src={turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80'}
           alt={turf.name}
