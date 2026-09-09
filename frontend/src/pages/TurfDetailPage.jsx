@@ -203,40 +203,19 @@ const TurfDetailPage = ({ onOpenAuth }) => {
         </div>
       </div>
 
-      {/* 3-Photo Gallery Grid Matching Exact Stitch Screenshot 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-auto lg:h-[380px]">
-        {/* Big Hero Image on Left */}
-        <div className="lg:col-span-8 rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-slate-100 h-64 sm:h-80 lg:h-full">
-          <img
-            src={turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80'}
-            alt="Main Arena Night Shot"
-            className="w-full h-full object-cover"
-          />
-        </div>
-
-        {/* 2 Stacked Images on Right */}
-        <div className="lg:col-span-4 grid grid-cols-2 lg:grid-cols-1 gap-4 h-40 sm:h-48 lg:h-full">
-          <div className="rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-slate-100 h-full">
-            <img
-              src={turf.images?.[1] || 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=800&q=80'}
-              alt="Goal net close-up"
-              className="w-full h-full object-cover"
-            />
-          </div>
-          <div className="rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-slate-100 h-full">
-            <img
-              src={turf.images?.[2] || 'https://images.unsplash.com/photo-1584697964190-7bb9fa76a086?auto=format&fit=crop&w=800&q=80'}
-              alt="Locker & Changing Facility"
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
+      {/* Main Turf Cover Image Banner */}
+      <div className="w-full rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-slate-100 h-64 sm:h-80 lg:h-[380px]">
+        <img
+          src={turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80'}
+          alt={turf.name}
+          className="w-full h-full object-cover"
+        />
       </div>
 
       {/* Main Content Grid: Left Details & Right Sticky Booking Card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Column: About, Facilities, Location, Reviews */}
+        {/* Left Column: About, Facilities, Reviews */}
         <div className="lg:col-span-7 space-y-8">
           
           {/* About Section */}
@@ -247,7 +226,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
             </p>
           </div>
 
-          {/* Facilities Grid Matching 6 Cards in Stitch Screenshot 1 */}
+          {/* Facilities Grid */}
           <div className="space-y-3">
             <h2 className="text-lg font-bold text-slate-900">Facilities</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -265,28 +244,6 @@ const TurfDetailPage = ({ onOpenAuth }) => {
                   <span className="text-xs font-bold text-slate-800">{fac}</span>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* Location Google Maps Card Matching Stitch */}
-          <div className="space-y-3">
-            <h2 className="text-lg font-bold text-slate-900">Location</h2>
-            <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 h-44 shadow-2xs group">
-              <img
-                src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1000&q=80"
-                alt="Map Preview"
-                className="w-full h-full object-cover filter saturate-75 opacity-80 group-hover:opacity-90 transition"
-              />
-              <div className="absolute inset-0 bg-slate-900/10" />
-              <a
-                href={`https://maps.google.com/?q=${encodeURIComponent(turf.address)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-xs hover:bg-white text-slate-800 text-xs font-bold px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-2 transition"
-              >
-                View on Google Maps
-                <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-              </a>
             </div>
           </div>
 
