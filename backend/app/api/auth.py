@@ -1,6 +1,7 @@
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token, get_current_user
@@ -12,9 +13,12 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 def register_customer(user_in: UserCreate, db: Session = Depends(get_db)):
+    clean_email = user_in.email.strip().lower()
+    clean_username = user_in.username.strip()
+    
     # Check if email or username exists
     existing_user = db.query(User).filter(
-        (User.email == user_in.email) | (User.username == user_in.username)
+        (func.lower(User.email) == clean_email) | (func.lower(User.username) == clean_username.lower())
     ).first()
     if existing_user:
         raise HTTPException(
@@ -23,10 +27,10 @@ def register_customer(user_in: UserCreate, db: Session = Depends(get_db)):
         )
     
     new_user = User(
-        email=user_in.email,
-        username=user_in.username,
-        full_name=user_in.full_name,
-        phone=user_in.phone,
+        email=clean_email,
+        username=clean_username,
+        full_name=user_in.full_name.strip(),
+        phone=user_in.phone.strip(),
         hashed_password=get_password_hash(user_in.password),
         role=RoleEnum.CUSTOMER,
         is_active=True,
@@ -53,8 +57,11 @@ def register_customer(user_in: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/register-owner", response_model=dict, status_code=status.HTTP_201_CREATED)
 def register_turf_owner(owner_in: OwnerRegister, db: Session = Depends(get_db)):
+    clean_email = owner_in.email.strip().lower()
+    clean_username = owner_in.username.strip()
+    
     existing_user = db.query(User).filter(
-        (User.email == owner_in.email) | (User.username == owner_in.username)
+        (func.lower(User.email) == clean_email) | (func.lower(User.username) == clean_username.lower())
     ).first()
     if existing_user:
         raise HTTPException(
@@ -63,12 +70,12 @@ def register_turf_owner(owner_in: OwnerRegister, db: Session = Depends(get_db)):
         )
     
     new_owner = User(
-        email=owner_in.email,
-        username=owner_in.username,
-        full_name=owner_in.full_name,
-        phone=owner_in.phone,
-        business_name=owner_in.business_name,
-        city=owner_in.city,
+        email=clean_email,
+        username=clean_username,
+        full_name=owner_in.full_name.strip(),
+        phone=owner_in.phone.strip(),
+        business_name=owner_in.business_name.strip(),
+        city=owner_in.city.strip(),
         hashed_password=get_password_hash(owner_in.password),
         role=RoleEnum.OWNER,
         is_active=True,
@@ -107,7 +114,8 @@ def register_turf_owner(owner_in: OwnerRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == credentials.email).first()
+    clean_email = credentials.email.strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == clean_email).first()
     if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -132,7 +140,8 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
 
 @router.post("/admin-login", response_model=Token)
 def admin_login(credentials: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == credentials.email).first()
+    clean_email = credentials.email.strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == clean_email).first()
     if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -152,3 +161,4 @@ def admin_login(credentials: UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 def get_current_user_profile(current_user: User = Depends(get_current_user)):
     return current_user
+

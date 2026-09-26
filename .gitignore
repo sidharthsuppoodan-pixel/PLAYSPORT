@@ -18,3 +18,9 @@ build/
 .pytest_cache/
 __pycache__/
 .DS_Store
+
+# Debug & Testing artifacts
+debug_*.py
+*.png
+test_report.html
+backend/.coverage

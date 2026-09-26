@@ -16,7 +16,7 @@ class TournamentTeamOut(BaseModel):
         from_attributes = True
 
 class TournamentBase(BaseModel):
-    turf_id: int
+    turf_id: Optional[int] = None
     title: str = Field(..., min_length=3, max_length=150)
     sport: str = "Football"
     format: str = "Knockout"
@@ -47,5 +47,6 @@ class TournamentOut(TournamentBase):
 
 class TeamRegisterRequest(BaseModel):
     team_name: str = Field(..., min_length=2, max_length=100)
+    captain_name: str = Field(..., min_length=2, max_length=100)
     contact_phone: str = Field(..., pattern=r"^\+?[0-9]{10,15}$")
     members_count: int = Field(default=7, ge=1, le=25)

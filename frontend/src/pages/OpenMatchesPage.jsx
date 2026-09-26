@@ -33,7 +33,7 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
   const canHostMatch = isOwner || isAdmin;
 
   const [newMatch, setNewMatch] = useState({
-    turf_id: 1,
+    turf_id: '',
     title: '5v5 Football Open Match',
     sport_type: 'Football',
     match_format: '5v5',

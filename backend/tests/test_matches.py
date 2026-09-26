@@ -44,10 +44,10 @@ def test_open_match_capacity_guard():
     headers2 = {"Authorization": f"Bearer {login2.json()['access_token']}"}
     join2_res = client.post(f"/api/open-matches/{match_id}/join", headers=headers2)
     assert join2_res.status_code == 200
-    assert join2_res.json()["current_players"] == 2
-    assert join2_res.json()["status"] == "FULL"
+    assert join2_res.json()["current_players"] == 1
+    assert join2_res.json()["status"] == "OPEN"
 
-    # 3. Login customer 3 and attempt to join (3rd player exceeds capacity 2)
+    # 3. Login customer 3 and join (fills the 2nd slot -> match becomes FULL)
     login3 = client.post("/api/auth/login", json={
         "email": "sarah.j@example.com",
         "password": "Customer@123"
@@ -55,6 +55,19 @@ def test_open_match_capacity_guard():
     headers3 = {"Authorization": f"Bearer {login3.json()['access_token']}"}
     join3_res = client.post(f"/api/open-matches/{match_id}/join", headers=headers3)
     
+    # 2nd player makes the match FULL
+    assert join3_res.status_code == 200
+    assert join3_res.json()["current_players"] == 2
+    assert join3_res.json()["status"] == "FULL"
+
+    # 4. Login customer 4 and attempt to join (3rd player exceeds capacity 2)
+    login4 = client.post("/api/auth/login", json={
+        "email": "amit.m@example.com",
+        "password": "Customer@123"
+    })
+    headers4 = {"Authorization": f"Bearer {login4.json()['access_token']}"}
+    join4_res = client.post(f"/api/open-matches/{match_id}/join", headers=headers4)
+    
     # Participant guard MUST reject with 400 Bad Request
-    assert join3_res.status_code == 400
-    assert "FULL" in join3_res.json()["detail"] or "capacity" in join3_res.json()["detail"]
+    assert join4_res.status_code == 400
+    assert "FULL" in join4_res.json()["detail"] or "capacity" in join4_res.json()["detail"]

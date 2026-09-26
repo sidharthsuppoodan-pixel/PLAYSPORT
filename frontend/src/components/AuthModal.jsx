@@ -39,9 +39,8 @@ const VALIDATORS = {
   },
   email: (v) => {
     if (!v || !v.trim()) return 'Email is required.';
-    if (/[A-Z]/.test(v)) return 'Email address cannot contain uppercase letters (must be strictly lowercase).';
-    if (!/^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/.test(v.trim())) {
-      return 'Enter a valid lowercase email address (e.g. name@gmail.com).';
+    if (!/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(v.trim())) {
+      return 'Enter a valid email address (e.g. name@gmail.com).';
     }
     return '';
   },
@@ -172,6 +171,8 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
     let nextValue = value;
     if (name === 'full_name') {
       nextValue = value.toUpperCase();
+    } else if (name === 'email') {
+      nextValue = value.toLowerCase();
     } else if (name === 'phone') {
       nextValue = value.replace(/\D/g, '').slice(0, 10);
     }
@@ -214,7 +215,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
         } else if (loggedUser?.role === 'OWNER') {
           navigate('/owner/dashboard');
         } else {
-          navigate('/');
+          // Do not navigate, let them stay on the current page (e.g., booking page)
         }
       } else if (mode === 'register') {
         if (formData.password !== formData.confirmPassword) {
@@ -230,7 +231,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
           password: formData.password,
         });
         onClose();
-        navigate('/');
+        // Stay on current page
       } else if (mode === 'owner_register') {
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match.');

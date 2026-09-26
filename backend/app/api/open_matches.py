@@ -41,18 +41,24 @@ def list_open_matches(
     results = []
     now = datetime.now()
 
+    user_turf_ids = []
+    if current_user and current_user.role == RoleEnum.OWNER:
+        user_turf_ids = [t.id for t in current_user.turfs]
+
     for m in matches:
         participants = db.query(MatchParticipant).filter(MatchParticipant.match_id == m.id).all()
 
         # Check if match start time has already passed
         match_start_dt = parse_slot_time_to_datetime(m.match_date, m.start_time)
         if match_start_dt and match_start_dt <= now:
-            # Hide expired matches from users who have NOT joined or hosted it
+            # Hide expired matches from users who have NOT joined or hosted it, unless they are the turf owner
             is_user_participant = False
             if current_user:
                 is_user_participant = (
                     m.creator_id == current_user.id or
-                    any(p.user_id == current_user.id for p in participants)
+                    any(p.user_id == current_user.id for p in participants) or
+                    current_user.role == RoleEnum.ADMIN or
+                    m.turf_id in user_turf_ids
                 )
             if not is_user_participant:
                 continue
@@ -120,6 +126,36 @@ def create_open_match(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot host an open match for a past date."
         )
+
+    # If user is OWNER, auto-resolve to their turf facility
+    if current_user.role == RoleEnum.OWNER:
+        user_turf = db.query(Turf).filter(Turf.owner_id == current_user.id).first()
+        if not user_turf:
+            from app.api.turfs import slugify
+            turf_name = current_user.business_name or f"{current_user.full_name}'s Sports Arena"
+            base_slug = slugify(turf_name) or "turf"
+            slug = f"{base_slug}-{current_user.id}"
+            user_turf = Turf(
+                owner_id=current_user.id,
+                name=turf_name,
+                slug=slug,
+                description=f"Welcome to {turf_name}.",
+                address=f"{current_user.city or 'Kerala'}, India",
+                city=current_user.city or "Kochi",
+                state="Kerala",
+                contact_phone=current_user.phone or "9876543210",
+                contact_email=current_user.email,
+                starting_price=1200.0,
+                sports_supported="5v5 Football, Box Cricket",
+                is_active=True
+            )
+            db.add(user_turf)
+            db.flush()
+        
+        # Override turf_id to owner's turf if provided turf_id isn't owned by current_user
+        provided_turf = db.query(Turf).filter(Turf.id == match_in.turf_id).first()
+        if not provided_turf or provided_turf.owner_id != current_user.id:
+            match_in.turf_id = user_turf.id
 
     turf = db.query(Turf).filter(Turf.id == match_in.turf_id).first()
     if not turf:
@@ -201,23 +237,13 @@ def create_open_match(
         start_time=match_in.start_time,
         end_time=match_in.end_time,
         max_players=match_in.max_players,
-        current_players=1, # Creator host is player 1
+        current_players=0,
         price_per_player=match_in.price_per_player,
         status=MatchStatusEnum.OPEN,
         rules=match_in.rules,
         description=match_in.description
     )
     db.add(new_match)
-    db.flush()
-
-    # Add creator as first participant
-    creator_part = MatchParticipant(
-        match_id=new_match.id,
-        user_id=current_user.id,
-        team_slot="Team A",
-        payment_status="PAID"
-    )
-    db.add(creator_part)
     db.commit()
     db.refresh(new_match)
 
@@ -232,7 +258,7 @@ def create_open_match(
         start_time=new_match.start_time,
         end_time=new_match.end_time,
         max_players=new_match.max_players,
-        current_players=1,
+        current_players=0,
         price_per_player=new_match.price_per_player,
         status=new_match.status,
         rules=new_match.rules,
@@ -240,17 +266,10 @@ def create_open_match(
         turf_name=turf.name,
         turf_city=turf.city,
         turf_image=turf.images[0] if (turf and turf.images and len(turf.images) > 0) else None,
-        slots_left=new_match.max_players - 1,
+        slots_left=new_match.max_players,
         created_at=new_match.created_at,
         creator_id=new_match.creator_id,
-        participants=[MatchParticipantOut(
-            id=creator_part.id,
-            user_id=current_user.id,
-            full_name=current_user.full_name,
-            username=current_user.username,
-            team_slot="Team A",
-            joined_at=creator_part.joined_at
-        )]
+        participants=[]
     )
 
 @router.post("/{match_id}/join", response_model=dict)

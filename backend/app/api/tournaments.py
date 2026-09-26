@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_owner_or_admin
 from app.models.tournament import Tournament, TournamentTeam, TournamentStatusEnum
 from app.models.turf import Turf
-from app.models.user import User
+from app.models.user import User, RoleEnum
 from app.models.notification import Notification, NotificationTypeEnum
 from app.schemas.tournament import TournamentCreate, TournamentOut, TournamentTeamOut, TeamRegisterRequest
 
@@ -71,9 +71,47 @@ def create_tournament(
     current_user: User = Depends(require_owner_or_admin),
     db: Session = Depends(get_db)
 ):
+    # Auto-resolve owner's turf facility if user is OWNER
+    if current_user.role == RoleEnum.OWNER:
+        user_turf = db.query(Turf).filter(Turf.owner_id == current_user.id).first()
+        if not user_turf:
+            from app.api.turfs import slugify
+            turf_name = current_user.business_name or f"{current_user.full_name}'s Sports Arena"
+            base_slug = slugify(turf_name) or "turf"
+            slug = f"{base_slug}-{current_user.id}"
+            user_turf = Turf(
+                owner_id=current_user.id,
+                name=turf_name,
+                slug=slug,
+                description=f"Welcome to {turf_name}.",
+                address=f"{current_user.city or 'Kerala'}, India",
+                city=current_user.city or "Kochi",
+                state="Kerala",
+                contact_phone=current_user.phone or "9876543210",
+                contact_email=current_user.email,
+                starting_price=1200.0,
+                sports_supported="5v5 Football, Box Cricket",
+                is_active=True
+            )
+            db.add(user_turf)
+            db.flush()
+        
+        provided_turf = db.query(Turf).filter(Turf.id == tourn_in.turf_id).first()
+        if not provided_turf or provided_turf.owner_id != current_user.id:
+            tourn_in.turf_id = user_turf.id
+
     turf = db.query(Turf).filter(Turf.id == tourn_in.turf_id).first()
     if not turf:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Turf not found")
+
+    if current_user.role != RoleEnum.ADMIN and turf.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this turf facility.")
+
+    # Ensure sport is added to sports_supported if not present
+    if tourn_in.sport and turf.sports_supported:
+        if tourn_in.sport.lower() not in turf.sports_supported.lower():
+            turf.sports_supported = f"{turf.sports_supported}, {tourn_in.sport}"
+            db.flush()
 
     tourn = Tournament(
         turf_id=tourn_in.turf_id,
@@ -165,3 +203,21 @@ def register_team(
         "current_teams": tourn.current_teams,
         "max_teams": tourn.max_teams
     }
+
+@router.delete("/{tourn_id}", status_code=status.HTTP_200_OK)
+def delete_tournament(
+    tourn_id: int,
+    current_user: User = Depends(require_owner_or_admin),
+    db: Session = Depends(get_db)
+):
+    tourn = db.query(Tournament).filter(Tournament.id == tourn_id).first()
+    if not tourn:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+        
+    if current_user.role != RoleEnum.ADMIN and tourn.creator_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to delete this tournament.")
+        
+    db.delete(tourn)
+    db.commit()
+    return {"detail": "Tournament deleted successfully"}
+

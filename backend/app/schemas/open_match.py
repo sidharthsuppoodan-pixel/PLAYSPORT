@@ -15,7 +15,7 @@ class MatchParticipantOut(BaseModel):
         from_attributes = True
 
 class OpenMatchBase(BaseModel):
-    turf_id: int
+    turf_id: Optional[int] = None
     ground_id: Optional[int] = None
     title: str = Field(..., min_length=3, max_length=150)
     sport_type: str = "Football"

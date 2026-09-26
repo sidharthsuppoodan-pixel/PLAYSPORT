@@ -20,14 +20,23 @@ from app.models.review import Review
 from app.models.notification import Notification, NotificationTypeEnum
 from app.models.audit_log import AuditLog
 
-def seed_database():
-    print("Initializing database tables...")
-    Base.metadata.drop_all(bind=engine)
+def seed_database(reset_db: bool = False):
+    if reset_db:
+        print("⚠️ Warning: Resetting all database tables...")
+        Base.metadata.drop_all(bind=engine)
+    
+    print("Ensuring database tables exist (safe mode: preserving existing data)...")
     Base.metadata.create_all(bind=engine)
     
     db = SessionLocal()
     try:
-        print("Seeding Users...")
+        # Check if database is already seeded/populated
+        existing_user = db.query(User).filter(User.email == "admin@playsport.com").first()
+        if existing_user and not reset_db:
+            print("✅ Database already populated. Existing user data preserved safely!")
+            return
+
+        print("Seeding default demo data...")
         
         # 1. Super Admin
         admin = User(
@@ -42,6 +51,7 @@ def seed_database():
             is_approved=True
         )
         db.add(admin)
+
         
         # 2. Approved Turf Owners
         owner1 = User(
@@ -420,4 +430,6 @@ def seed_database():
         db.close()
 
 if __name__ == "__main__":
-    seed_database()
+    reset_requested = "--reset-all-data" in sys.argv
+    seed_database(reset_db=reset_requested)
+

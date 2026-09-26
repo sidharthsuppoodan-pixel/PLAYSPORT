@@ -1,3 +1,4 @@
+import re
 from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -107,6 +108,50 @@ def approve_owner(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found")
     
     owner.is_approved = True
+
+    # Auto-create the owner's single Turf facility under their registered business_name
+    existing_turf = db.query(Turf).filter(Turf.owner_id == owner.id).first()
+    if not existing_turf:
+        turf_name = owner.business_name or f"{owner.full_name}'s Sports Arena"
+        base_slug = re.sub(r'[^\w\s-]', '', turf_name.lower().strip())
+        base_slug = re.sub(r'[\s_-]+', '-', base_slug) or "turf"
+        slug = f"{base_slug}-{owner.id}"
+        
+        new_turf = Turf(
+            owner_id=owner.id,
+            name=turf_name,
+            slug=slug,
+            description=f"Welcome to {turf_name}, your premier sports facility in {owner.city or 'Kerala'}.",
+            address=f"{owner.city or 'Kerala'}, India",
+            city=owner.city or "Kochi",
+            state="Kerala",
+            contact_phone=owner.phone,
+            contact_email=owner.email,
+            rating=4.8,
+            review_count=0,
+            starting_price=1200.0,
+            dimension_text="6000 sq ft",
+            sports_supported="5v5 Football, Box Cricket",
+            opening_time="06:00 AM",
+            closing_time="11:00 PM",
+            is_active=True
+        )
+        new_turf.facilities = ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water", "Spectator Seating", "First Aid Kit"]
+        new_turf.images = ["https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80"]
+        db.add(new_turf)
+        db.flush()
+
+        # Add default ground for this turf
+        ground = Ground(
+            turf_id=new_turf.id,
+            name="Turf A (5v5)",
+            sport_type="Football",
+            ground_size="5v5",
+            surface_type="FIFA Approved Artificial Turf",
+            hourly_rate=1200.0,
+            is_active=True
+        )
+        db.add(ground)
     
     # Audit log
     audit = AuditLog(
@@ -122,14 +167,14 @@ def approve_owner(
     notif = Notification(
         user_id=owner.id,
         title="Account Approved! 🎉",
-        message="Your Turf Owner account has been approved by the Administrator. You can now create turfs and manage slots.",
+        message=f"Your Turf Owner account and facility '{owner.business_name}' have been approved. You can now edit your turf details and manage slots.",
         type=NotificationTypeEnum.ADMIN,
         link="/owner/dashboard"
     )
     db.add(notif)
     
     db.commit()
-    return {"message": f"Owner '{owner.full_name}' successfully approved.", "id": owner_id}
+    return {"message": f"Owner '{owner.full_name}' and facility '{owner.business_name}' successfully approved.", "id": owner_id}
 
 @router.post("/pending-owners/{owner_id}/reject", response_model=dict)
 def reject_owner(

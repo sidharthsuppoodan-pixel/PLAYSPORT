@@ -14,10 +14,7 @@ class UserBase(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_strict_email(cls, v):
-        v_str = str(v)
-        if re.search(r"[A-Z]", v_str):
-            raise ValueError("Email address cannot contain uppercase letters (must be strictly lowercase).")
-        return v
+        return str(v).strip().lower()
 
     @field_validator("username")
     @classmethod
@@ -100,10 +97,8 @@ class UserLogin(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_strict_login_email(cls, v):
-        v_str = str(v)
-        if re.search(r"[A-Z]", v_str):
-            raise ValueError("Email address cannot contain uppercase letters (must be strictly lowercase).")
-        return v
+        return str(v).strip().lower()
+
 
 
 class Token(BaseModel):

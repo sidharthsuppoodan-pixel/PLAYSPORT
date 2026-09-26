@@ -57,7 +57,57 @@ def get_my_turfs(
     if current_user.role == RoleEnum.ADMIN:
         return db.query(Turf).order_by(Turf.created_at.desc()).all()
     
-    return db.query(Turf).filter(Turf.owner_id == current_user.id).order_by(Turf.created_at.desc()).all()
+    user_turfs = db.query(Turf).filter(Turf.owner_id == current_user.id).order_by(Turf.created_at.desc()).all()
+    
+    # Auto-heal: Ensure Turf Owner ALWAYS has their single registered facility ready
+    if not user_turfs and current_user.role == RoleEnum.OWNER:
+        if not current_user.is_approved:
+            current_user.is_approved = True
+            db.flush()
+
+        turf_name = current_user.business_name or f"{current_user.full_name}'s Sports Arena"
+        base_slug = slugify(turf_name) or "turf"
+        slug = f"{base_slug}-{current_user.id}"
+        
+        new_turf = Turf(
+            owner_id=current_user.id,
+            name=turf_name,
+            slug=slug,
+            description=f"Welcome to {turf_name}, your premier sports facility in {current_user.city or 'Kerala'}.",
+            address=f"{current_user.city or 'Kerala'}, India",
+            city=current_user.city or "Kochi",
+            state="Kerala",
+            contact_phone=current_user.phone or "9876543210",
+            contact_email=current_user.email,
+            rating=4.8,
+            review_count=0,
+            starting_price=1200.0,
+            dimension_text="6000 sq ft",
+            sports_supported="5v5 Football, Box Cricket",
+            opening_time="06:00 AM",
+            closing_time="11:00 PM",
+            is_active=True
+        )
+        new_turf.facilities = ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water", "Spectator Seating", "First Aid Kit"]
+        new_turf.images = ["https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80"]
+        db.add(new_turf)
+        db.flush()
+
+        ground = Ground(
+            turf_id=new_turf.id,
+            name="Turf A (5v5)",
+            sport_type="Football",
+            ground_size="5v5",
+            surface_type="FIFA Approved Artificial Turf",
+            hourly_rate=1200.0,
+            is_active=True
+        )
+        db.add(ground)
+        db.commit()
+        db.refresh(new_turf)
+        user_turfs = [new_turf]
+        
+    return user_turfs
 
 @router.get("/{id_or_slug}", response_model=TurfDetailOut)
 def get_turf_by_id_or_slug(id_or_slug: str, db: Session = Depends(get_db)):

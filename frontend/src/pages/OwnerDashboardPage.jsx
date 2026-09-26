@@ -26,32 +26,33 @@ import {
   Tag,
   Trash2,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ShieldCheck
 } from 'lucide-react';
 
 export const isSupportedImage = (urlOrFileName) => {
   if (!urlOrFileName || typeof urlOrFileName !== 'string') return false;
   const lower = urlOrFileName.trim().toLowerCase();
-  
+
   // Explicitly reject document file extensions
   const forbiddenExts = ['.pdf', '.ppt', '.pptx', '.doc', '.docx', '.txt', '.xlsx', '.csv', '.zip', '.rar'];
   if (forbiddenExts.some(ext => lower.endsWith(ext) || lower.includes(ext + '?'))) {
     return false;
   }
-  
+
   // Allow data URIs starting with data:image/
   if (lower.startsWith('data:image/')) return true;
-  
+
   // Allow common web image extensions or standard image URLs
   const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg'];
   if (allowedExts.some(ext => lower.endsWith(ext) || lower.includes(ext + '?'))) return true;
-  
+
   // Allow Unsplash, Imgur, Cloudinary, AWS S3 image links if HTTP/HTTPS
-  if ((lower.startsWith('http://') || lower.startsWith('https://')) && 
-      !lower.match(/\.(pdf|doc|docx|ppt|pptx|txt)$/i)) {
+  if ((lower.startsWith('http://') || lower.startsWith('https://')) &&
+    !lower.match(/\.(pdf|doc|docx|ppt|pptx|txt)$/i)) {
     return true;
   }
-  
+
   return false;
 };
 
@@ -77,7 +78,7 @@ const PRESET_SPORTS_GEAR = [
 
 const OwnerDashboardPage = () => {
   const { user } = useAuth();
-  
+
   // Dashboard states
   const [metrics, setMetrics] = useState({
     total_turfs: 0,
@@ -89,7 +90,7 @@ const OwnerDashboardPage = () => {
   const [recentBookings, setRecentBookings] = useState([]);
   const [facilityStatuses, setFacilityStatuses] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
-  
+
   // Entity data states
   const [myTurfs, setMyTurfs] = useState([]);
   const [openMatchesList, setOpenMatchesList] = useState([]);
@@ -103,6 +104,8 @@ const OwnerDashboardPage = () => {
   const [showCreateMatchModal, setShowCreateMatchModal] = useState(false);
   const [confirmDeleteMatch, setConfirmDeleteMatch] = useState(null);
   const [deletingMatchId, setDeletingMatchId] = useState(null);
+  const [confirmDeleteTournament, setConfirmDeleteTournament] = useState(null);
+  const [deletingTournamentId, setDeletingTournamentId] = useState(null);
   const [showCreateTournamentModal, setShowCreateTournamentModal] = useState(false);
   const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false);
   const [showEditTurfModal, setShowEditTurfModal] = useState(false);
@@ -189,11 +192,11 @@ const OwnerDashboardPage = () => {
       ]);
 
       const myTurfsList = turfsRes.data || [];
-      const myTurfIds = new Set(myTurfsList.map(t => t.id));
+      const myTurfIds = new Set(myTurfsList.map(t => Number(t.id)));
 
-      const filteredMatches = (matchesRes.data || []).filter(m => myTurfIds.has(m.turf_id));
-      const filteredTournaments = (tournRes.data || []).filter(t => myTurfIds.has(t.turf_id));
-      const filteredEquipment = (eqRes.data || []).filter(e => myTurfIds.has(e.turf_id));
+      const filteredMatches = (matchesRes.data || []).filter(m => myTurfIds.has(Number(m.turf_id)));
+      const filteredTournaments = (tournRes.data || []).filter(t => myTurfIds.has(Number(t.turf_id)));
+      const filteredEquipment = (eqRes.data || []).filter(e => myTurfIds.has(Number(e.turf_id)));
 
       setMetrics(metRes.data);
       setRecentBookings(bookRes.data || []);
@@ -225,13 +228,26 @@ const OwnerDashboardPage = () => {
     fetchDashboard();
   }, []);
 
+  const getAvailableSportsForTurf = (turf) => {
+    if (!turf) return ['Football', 'Cricket'];
+    const standardSports = ['Football', 'Cricket', 'Badminton', 'Tennis', 'Basketball', 'Volleyball', 'Table Tennis'];
+    const sportsSupportedText = (turf.sports_supported || '').toLowerCase();
+
+    const matched = standardSports.filter(s => {
+      return sportsSupportedText.includes(s.toLowerCase());
+    });
+
+    if (matched.length > 0) return matched;
+    return ['Football', 'Cricket'];
+  };
+
   // Form submit handlers
 
   const handleGenerateSlotsSubmit = async (e) => {
     e.preventDefault();
     setModalError('');
     try {
-      const selectedTurfId = Number(slotGenData.turf_id) || (myTurfs[0]?.id || 1);
+      const selectedTurfId = Number(slotGenData.turf_id) || myTurfs[0]?.id;
       const payload = {
         turf_id: selectedTurfId,
         start_date: slotGenData.start_date,
@@ -248,7 +264,8 @@ const OwnerDashboardPage = () => {
         setShowManageSlotsModal(false);
       }, 1200);
     } catch (err) {
-      setModalError(err.response?.data?.detail || "Failed to generate slots.");
+      const detail = err.response?.data?.detail;
+      setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Failed to generate slots."));
     }
   };
 
@@ -257,10 +274,10 @@ const OwnerDashboardPage = () => {
     setModalError('');
     setModalSuccess('');
     try {
-      const selectedTurfId = Number(newMatch.turf_id) || (myTurfs[0]?.id || 1);
+      const selectedTurfId = Number(newMatch.turf_id) || myTurfs[0]?.id;
       const sportName = newMatch.sport_type || 'Football';
       const formatVariant = newMatch.match_format || (sportName === 'Cricket' ? 'Box Cricket' : '5v5');
-      
+
       const payload = {
         turf_id: selectedTurfId,
         title: newMatch.title || `${formatVariant} ${sportName} Open Match`,
@@ -281,10 +298,12 @@ const OwnerDashboardPage = () => {
       setTimeout(() => {
         setModalSuccess('');
         setShowCreateMatchModal(false);
+        setActiveTab('matches');
       }, 1400);
     } catch (err) {
       console.error("Create match submit error:", err);
-      setModalError(err.response?.data?.detail || "Failed to create match.");
+      const detail = err.response?.data?.detail;
+      setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Failed to create match."));
     }
   };
 
@@ -301,7 +320,8 @@ const OwnerDashboardPage = () => {
       setTimeout(() => setModalSuccess(''), 3000);
     } catch (err) {
       console.error("Delete match error", err);
-      setModalError(err.response?.data?.detail || "Could not delete open match.");
+      const detail = err.response?.data?.detail;
+      setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Could not delete open match."));
       setTimeout(() => setModalError(''), 3000);
     } finally {
       setDeletingMatchId(null);
@@ -309,19 +329,48 @@ const OwnerDashboardPage = () => {
     }
   };
 
+  const handleConfirmDeleteTournament = async () => {
+    if (!confirmDeleteTournament) return;
+    const tournId = confirmDeleteTournament.id;
+    setDeletingTournamentId(tournId);
+    setModalError('');
+    setModalSuccess('');
+    try {
+      await tournamentsAPI.delete(tournId);
+      setModalSuccess("Tournament cancelled successfully!");
+      fetchDashboard();
+      setTimeout(() => setModalSuccess(''), 3000);
+    } catch (err) {
+      console.error("Delete tournament error", err);
+      const detail = err.response?.data?.detail;
+      setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Could not delete tournament."));
+      setTimeout(() => setModalError(''), 3000);
+    } finally {
+      setDeletingTournamentId(null);
+      setConfirmDeleteTournament(null);
+    }
+  };
+
   const handleCreateTournamentSubmit = async (e) => {
     e.preventDefault();
     setModalError('');
     try {
-      await tournamentsAPI.create(newTournament);
+      const activeTurfId = Number(newTournament.turf_id) || myTurfs[0]?.id;
+      const payload = {
+        ...newTournament,
+        turf_id: activeTurfId
+      };
+      await tournamentsAPI.create(payload);
       setModalSuccess("Tournament created successfully!");
       fetchDashboard();
       setTimeout(() => {
         setModalSuccess('');
         setShowCreateTournamentModal(false);
+        setActiveTab('tournaments');
       }, 1200);
     } catch (err) {
-      setModalError(err.response?.data?.detail || "Failed to create tournament.");
+      const detail = err.response?.data?.detail;
+      setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Failed to create tournament."));
     }
   };
 
@@ -329,8 +378,10 @@ const OwnerDashboardPage = () => {
     e.preventDefault();
     setModalError('');
     try {
+      const activeTurfId = Number(newEquipment.turf_id) || myTurfs[0]?.id;
       await equipmentAPI.create({
         ...newEquipment,
+        turf_id: activeTurfId,
         available_quantity: newEquipment.total_quantity
       });
       setModalSuccess("Equipment added to rental inventory!");
@@ -340,7 +391,8 @@ const OwnerDashboardPage = () => {
         setShowAddEquipmentModal(false);
       }, 1200);
     } catch (err) {
-      setModalError(err.response?.data?.detail || "Failed to add equipment.");
+      const detail = err.response?.data?.detail;
+      setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Failed to add equipment."));
     }
   };
 
@@ -358,21 +410,28 @@ const OwnerDashboardPage = () => {
         name: editingTurf.name,
         city: editingTurf.city,
         address: editingTurf.address,
+        pincode: editingTurf.pincode || '',
+        contact_phone: editingTurf.contact_phone || '',
+        contact_email: editingTurf.contact_email || '',
         starting_price: Number(editingTurf.starting_price) || 1200,
+        dimension_text: editingTurf.dimension_text || "6000 sq ft",
+        opening_time: editingTurf.opening_time || "06:00 AM",
+        closing_time: editingTurf.closing_time || "11:00 PM",
         sports_supported: editingTurf.sports_supported,
         description: editingTurf.description,
-        facilities: ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
+        facilities: editingTurf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
         images: editingTurf.image_url ? [editingTurf.image_url] : ["https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80"]
       };
       await turfsAPI.update(editingTurf.id, payload);
-      setModalSuccess("Turf photo and details updated successfully!");
+      setModalSuccess("Turf profile details updated successfully!");
       fetchDashboard();
       setTimeout(() => {
         setModalSuccess('');
         setShowEditTurfModal(false);
       }, 1200);
     } catch (err) {
-      setModalError(err.response?.data?.detail || "Failed to update turf details.");
+      const detail = err.response?.data?.detail;
+      setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Failed to update turf details."));
     }
   };
 
@@ -433,13 +492,14 @@ const OwnerDashboardPage = () => {
       setTimeout(() => setModalSuccess(''), 3000);
     } catch (err) {
       console.error("Create turf error:", err);
-      setModalError(err.response?.data?.detail || "Failed to create turf.");
+      const detail = err.response?.data?.detail;
+      setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Failed to create turf."));
     }
   };
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex">
-      
+
       {/* Left Sidebar for Turf Owner */}
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col justify-between py-6 px-4 shrink-0">
         <div className="space-y-6">
@@ -451,9 +511,8 @@ const OwnerDashboardPage = () => {
           <nav className="space-y-1">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition ${
-                activeTab === 'dashboard' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition ${activeTab === 'dashboard' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
             >
               <LayoutDashboard className="w-4 h-4 text-blue-600" />
               Overview
@@ -461,9 +520,8 @@ const OwnerDashboardPage = () => {
 
             <button
               onClick={() => setActiveTab('turfs')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'turfs' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${activeTab === 'turfs' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
             >
               <Building className="w-4 h-4 text-slate-400" />
               My Turfs
@@ -471,9 +529,8 @@ const OwnerDashboardPage = () => {
 
             <button
               onClick={() => setActiveTab('slots')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'slots' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${activeTab === 'slots' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
             >
               <Calendar className="w-4 h-4 text-slate-400" />
               Slot Manager
@@ -481,9 +538,8 @@ const OwnerDashboardPage = () => {
 
             <button
               onClick={() => setActiveTab('bookings')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'bookings' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${activeTab === 'bookings' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
             >
               <BookOpen className="w-4 h-4 text-slate-400" />
               Bookings
@@ -491,9 +547,8 @@ const OwnerDashboardPage = () => {
 
             <button
               onClick={() => setActiveTab('matches')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'matches' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${activeTab === 'matches' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
             >
               <Trophy className="w-4 h-4 text-slate-400" />
               Open Matches
@@ -501,9 +556,8 @@ const OwnerDashboardPage = () => {
 
             <button
               onClick={() => setActiveTab('tournaments')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'tournaments' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${activeTab === 'tournaments' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
             >
               <Award className="w-4 h-4 text-slate-400" />
               Tournaments
@@ -511,9 +565,8 @@ const OwnerDashboardPage = () => {
 
             <button
               onClick={() => setActiveTab('equipment')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${
-                activeTab === 'equipment' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition ${activeTab === 'equipment' ? 'bg-blue-50/80 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
             >
               <Dumbbell className="w-4 h-4 text-slate-400" />
               Equipment Rentals
@@ -537,7 +590,7 @@ const OwnerDashboardPage = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 p-6 sm:p-8 max-w-7xl">
-        
+
         {/* Header & Quick Action Trigger Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
@@ -574,7 +627,7 @@ const OwnerDashboardPage = () => {
         {/* ─── TAB 1: OVERVIEW DASHBOARD ────────────────────────────────────────── */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            
+
             {/* KPI Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
@@ -620,7 +673,7 @@ const OwnerDashboardPage = () => {
 
             {/* Split Content: Bookings & Facilities */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              
+
               <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-bold text-slate-900">Recent Customer Bookings</h2>
@@ -689,21 +742,43 @@ const OwnerDashboardPage = () => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Your Listed Turfs ({myTurfs.length})</h2>
-                <p className="text-xs text-slate-500">Manage your existing sports venues or register a new turf pitch.</p>
+                <h2 className="text-lg font-bold text-slate-900">Your Registered Sports Facility</h2>
+                <p className="text-xs text-slate-500">Manage your facility details, sports offered, amenities, location, and cover photos.</p>
               </div>
               <button
-                onClick={() => {
-                  if (myTurfs.length > 0) {
-                    alert("Waiting for Approval: You have already registered your turf facility. Your turf application is registered and active.");
-                    return;
-                  }
-                  setShowCreateTurfModal(true);
-                }}
-                className="py-2.5 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-700/20 transition flex items-center gap-2"
+                onClick={() => setShowCreateTurfModal(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
               >
-                <Plus className="w-4 h-4" /> Register New Turf
+                + Register New Turf
               </button>
+              {myTurfs.length > 0 && (
+                <button
+                  onClick={() => {
+                    const turf = myTurfs[0];
+                    setEditingTurf({
+                      id: turf.id,
+                      name: turf.name,
+                      city: turf.city || 'Kochi',
+                      address: turf.address || '',
+                      pincode: turf.pincode || '',
+                      contact_phone: turf.contact_phone || '',
+                      contact_email: turf.contact_email || '',
+                      starting_price: turf.starting_price || 1200,
+                      dimension_text: turf.dimension_text || '6000 sq ft',
+                      sports_supported: turf.sports_supported || 'Football (5v5), Box Cricket',
+                      facilities: turf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
+                      image_url: turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
+                      description: turf.description || '',
+                      opening_time: turf.opening_time || '06:00 AM',
+                      closing_time: turf.closing_time || '11:00 PM'
+                    });
+                    setShowEditTurfModal(true);
+                  }}
+                  className="py-2.5 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-700/20 transition flex items-center gap-2"
+                >
+                  ✏️ Edit Turf Profile
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -726,16 +801,23 @@ const OwnerDashboardPage = () => {
                             name: turf.name,
                             city: turf.city || 'Kochi',
                             address: turf.address || '',
+                            pincode: turf.pincode || '',
+                            contact_phone: turf.contact_phone || '',
+                            contact_email: turf.contact_email || '',
                             starting_price: turf.starting_price || 1200,
+                            dimension_text: turf.dimension_text || '6000 sq ft',
                             sports_supported: turf.sports_supported || 'Football (5v5), Box Cricket',
+                            facilities: turf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
                             image_url: turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
-                            description: turf.description || ''
+                            description: turf.description || '',
+                            opening_time: turf.opening_time || '06:00 AM',
+                            closing_time: turf.closing_time || '11:00 PM'
                           });
                           setShowEditTurfModal(true);
                         }}
-                        className="py-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg transition flex items-center gap-1"
+                        className="py-1 px-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-[11px] font-bold rounded-lg transition flex items-center gap-1 border border-brand-200"
                       >
-                        ✏️ Edit Photo & Details
+                        ✏️ Edit Turf Profile
                       </button>
                       <button onClick={() => { setSlotGenData(s => ({ ...s, turf_id: turf.id })); setShowManageSlotsModal(true); }} className="text-brand-700 font-bold hover:underline text-xs">
                         + Manage Slots
@@ -767,7 +849,7 @@ const OwnerDashboardPage = () => {
                 <Plus className="w-4 h-4" /> Batch Generate Slots
               </button>
             </div>
-            
+
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-2">
               <p className="font-bold text-slate-900">💡 Quick Tip for Turf Owners:</p>
               <p>Generate slots in advance for the upcoming week. Players will be able to view and book these slots in real time.</p>
@@ -952,6 +1034,47 @@ const OwnerDashboardPage = () => {
                     <p>🎟️ Entry Fee: ₹{t.entry_fee} per team</p>
                     <p>📅 Dates: {t.start_date} to {t.end_date}</p>
                   </div>
+
+                  {/* Registered Teams List */}
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-purple-600" />
+                        Registered Teams ({t.teams?.length || 0} / {t.max_teams}):
+                      </span>
+                    </div>
+
+                    {t.teams && t.teams.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        {t.teams.map((team, idx) => (
+                          <div key={team.id || idx} className="flex flex-col p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
+                            <p className="font-bold text-slate-900 truncate flex items-center gap-1.5">
+                              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                              {team.team_name}
+                            </p>
+                            <p className="text-[10px] text-slate-500 pl-5">
+                              Captain: {team.captain_name} ({team.contact_phone})
+                            </p>
+                            <p className="text-[10px] text-slate-400 pl-5">
+                              Squad Size: {team.members_count}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic py-1 text-center bg-slate-50 rounded-lg">No teams registered yet.</p>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-medium">{t.max_teams - (t.teams?.length || 0)} slots remaining</span>
+                    <button
+                      onClick={() => setConfirmDeleteTournament(t)}
+                      className="py-1.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 transition flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Cancel Tournament
+                    </button>
+                  </div>
                 </div>
               ))}
               {tournamentsList.length === 0 && (
@@ -1021,27 +1144,10 @@ const OwnerDashboardPage = () => {
             {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold">{modalError}</div>}
             <form onSubmit={handleGenerateSlotsSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Turf</label>
-                <select
-                  value={slotGenData.turf_id}
-                  onChange={(e) => {
-                    const tId = Number(e.target.value);
-                    const selTurf = myTurfs.find(t => t.id === tId);
-                    setSlotGenData(prev => ({
-                      ...prev,
-                      turf_id: tId,
-                      hourly_price: selTurf?.starting_price || 1200
-                    }));
-                  }}
-                  className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
-                >
-                  {myTurfs.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.city})
-                    </option>
-                  ))}
-                  {myTurfs.length === 0 && <option value="">No Turfs Available</option>}
-                </select>
+                <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-500">Turf Venue:</span>
+                  <strong className="font-bold text-slate-900">{myTurfs[0]?.name || 'Your Turf'} ({myTurfs[0]?.city || 'Kerala'})</strong>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1083,7 +1189,7 @@ const OwnerDashboardPage = () => {
                       const isPast = isToday && h <= curHr;
                       return (
                         <option key={h} value={h} disabled={isPast}>
-                          {h === 0 ? '12 AM (Midnight)' : h < 12 ? `${h} AM` : h === 12 ? '12 PM (Noon)' : `${h-12} PM`} {isPast ? '(Passed)' : ''}
+                          {h === 0 ? '12 AM (Midnight)' : h < 12 ? `${h} AM` : h === 12 ? '12 PM (Noon)' : `${h - 12} PM`} {isPast ? '(Passed)' : ''}
                         </option>
                       );
                     })}
@@ -1103,7 +1209,7 @@ const OwnerDashboardPage = () => {
                       const isPast = isToday && h <= curHr;
                       return (
                         <option key={h} value={h} disabled={isPast}>
-                          {h === 24 ? '12 AM (End of day)' : h < 12 ? `${h} AM` : h === 12 ? '12 PM (Noon)' : `${h-12} PM`} {isPast ? '(Passed)' : ''}
+                          {h === 24 ? '12 AM (End of day)' : h < 12 ? `${h} AM` : h === 12 ? '12 PM (Noon)' : `${h - 12} PM`} {isPast ? '(Passed)' : ''}
                         </option>
                       );
                     })}
@@ -1128,28 +1234,16 @@ const OwnerDashboardPage = () => {
             <button onClick={() => setShowCreateMatchModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
             <h3 className="text-base font-bold text-slate-900 mb-1">Create Open Pick-up Match</h3>
             <p className="text-xs text-slate-500 mb-4">Host a match for individual players. Creating reserves the time slot.</p>
-            
+
             {modalSuccess && <div className="p-3 mb-3 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">{modalSuccess}</div>}
             {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold border border-rose-200">{modalError}</div>}
-            
+
             <form onSubmit={handleCreateMatchSubmit} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Turf</label>
-                <select
-                  value={newMatch.turf_id || (myTurfs[0]?.id || '')}
-                  onChange={(e) => {
-                    const tId = Number(e.target.value);
-                    setNewMatch(prev => ({ ...prev, turf_id: tId }));
-                  }}
-                  className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
-                >
-                  {myTurfs.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.city})
-                    </option>
-                  ))}
-                  {myTurfs.length === 0 && <option value="">No Turfs Owned</option>}
-                </select>
+                <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-500">Turf Venue:</span>
+                  <strong className="font-bold text-slate-900">{myTurfs[0]?.name || user?.business_name || `${user?.full_name || 'Owner'}'s Arena`} ({myTurfs[0]?.city || user?.city || 'Kerala'})</strong>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1188,7 +1282,7 @@ const OwnerDashboardPage = () => {
                       else if (fmt === '11v11') cap = 22;
                       else if (fmt === 'Box Cricket' || fmt === '6v6') cap = 12;
                       else if (fmt === '8v8') cap = 16;
-                      
+
                       setNewMatch(prev => ({
                         ...prev,
                         match_format: fmt,
@@ -1257,8 +1351,8 @@ const OwnerDashboardPage = () => {
                       const h = idx + 6; // 6 AM to 11 PM
                       const stStr = `${h < 10 ? '0' : ''}${h}:00`;
                       const endH = h + 1;
-                      const dispStr = `${h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h-12} PM`} - ${endH < 12 ? `${endH} AM` : endH === 12 ? '12 PM' : `${endH-12} PM`}`;
-                      
+                      const dispStr = `${h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`} - ${endH < 12 ? `${endH} AM` : endH === 12 ? '12 PM' : `${endH - 12} PM`}`;
+
                       const isToday = newMatch.match_date === new Date().toISOString().split('T')[0];
                       const curHr = new Date().getHours();
                       const isPast = isToday && h <= curHr;
@@ -1315,50 +1409,173 @@ const OwnerDashboardPage = () => {
       )}
 
       {/* ─── MODAL 5: CREATE TOURNAMENT ─────────────────────────────────────── */}
-      {showCreateTournamentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-md relative fade-in">
-            <button onClick={() => setShowCreateTournamentModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
-            <h3 className="text-base font-bold text-slate-900 mb-1">Host Tournament / Cup</h3>
-            <p className="text-xs text-slate-500 mb-4">Create a team tournament at your sports arena.</p>
-            {modalSuccess && <div className="p-3 mb-3 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">{modalSuccess}</div>}
-            {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold">{modalError}</div>}
-            <form onSubmit={handleCreateTournamentSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Turf</label>
-                <select
-                  value={newTournament.turf_id}
-                  onChange={(e) => setNewTournament(prev => ({ ...prev, turf_id: Number(e.target.value) }))}
-                  className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
-                >
-                  {myTurfs.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.city})
-                    </option>
-                  ))}
-                  {myTurfs.length === 0 && <option value="">No Turfs Owned</option>}
-                </select>
-              </div>
+      {showCreateTournamentModal && (() => {
+        const selectedTurfForTournament = myTurfs.find(t => t.id === Number(newTournament.turf_id)) || myTurfs[0];
+        const availableSportsForTournament = getAvailableSportsForTurf(selectedTurfForTournament);
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Tournament Title</label>
-                <input type="text" required value={newTournament.title} onChange={(e) => setNewTournament({ ...newTournament, title: e.target.value })} placeholder="e.g. City Champions Trophy 2026" className="w-full px-3 py-2 border rounded-lg" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-lg relative fade-in max-h-[90vh] overflow-y-auto">
+              <button onClick={() => setShowCreateTournamentModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
+              <h3 className="text-base font-bold text-slate-900 mb-1">Host Tournament / Cup</h3>
+              <p className="text-xs text-slate-500 mb-4">Create a sports tournament at your arena with custom prize pool & team limits.</p>
+              {modalSuccess && <div className="p-3 mb-3 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">{modalSuccess}</div>}
+              {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold">{modalError}</div>}
+              <form onSubmit={handleCreateTournamentSubmit} className="space-y-3.5 text-xs">
+
+                {/* 1. Hosting Turf Venue */}
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Entry Fee (₹)</label>
-                  <input type="number" required value={newTournament.entry_fee} onChange={(e) => setNewTournament({ ...newTournament, entry_fee: Number(e.target.value) })} className="w-full px-3 py-2 border rounded-lg" />
+                  <div className="p-2.5 bg-purple-50 border border-purple-200/80 rounded-xl flex items-center justify-between text-xs">
+                    <span className="font-semibold text-purple-700">Tournament Venue:</span>
+                    <strong className="font-bold text-purple-950">{selectedTurfForTournament?.name || myTurfs[0]?.name || user?.business_name || `${user?.full_name || 'Owner'}'s Arena`} ({selectedTurfForTournament?.city || myTurfs[0]?.city || user?.city || 'Kerala'})</strong>
+                  </div>
                 </div>
+
+                {/* 2. Select Sport (Restricted to selected turf's sports) */}
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Prize Pool (₹)</label>
-                  <input type="number" required value={newTournament.prize_pool} onChange={(e) => setNewTournament({ ...newTournament, prize_pool: Number(e.target.value) })} className="w-full px-3 py-2 border rounded-lg" />
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Select Sport <span className="text-rose-500">*</span>
+                    <span className="text-[11px] font-normal text-purple-700 ml-1">
+                      (Restricted to sports supported by {selectedTurfForTournament?.name || 'this turf'})
+                    </span>
+                  </label>
+                  <select
+                    value={newTournament.sport}
+                    onChange={(e) => setNewTournament(prev => ({ ...prev, sport: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg bg-white font-semibold text-purple-900 border-purple-200 focus:ring-2 focus:ring-purple-500"
+                  >
+                    {availableSportsForTournament.map((s) => (
+                      <option key={s} value={s}>
+                        {s} Tournament
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-              <button type="submit" className="w-full mt-3 py-2.5 bg-purple-700 text-white font-bold rounded-lg hover:bg-purple-800">Publish Tournament</button>
-            </form>
+
+                {/* 3. Tournament Title */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tournament Title <span className="text-rose-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={newTournament.title}
+                    onChange={(e) => setNewTournament({ ...newTournament, title: e.target.value })}
+                    placeholder="e.g. Kerala Champions Cup 2026"
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+
+                {/* 4. Format & Max Teams */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Tournament Format</label>
+                    <select
+                      value={newTournament.format}
+                      onChange={(e) => setNewTournament({ ...newTournament, format: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
+                    >
+                      <option value="Knockout">Knockout Championship</option>
+                      <option value="League">League / Round Robin</option>
+                      <option value="Group + Knockout">Group Stage + Knockout</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Max Teams Capacity <span className="text-rose-500">*</span></label>
+                    <select
+                      value={newTournament.max_teams}
+                      onChange={(e) => setNewTournament({ ...newTournament, max_teams: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border rounded-lg bg-white font-semibold text-slate-800"
+                    >
+                      {[4, 8, 12, 16, 24, 32].map(n => (
+                        <option key={n} value={n}>{n} Teams</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 5. Entry Fee & Prize Pool */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Team Registration Fee (₹) <span className="text-rose-500">*</span></label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      value={newTournament.entry_fee}
+                      onChange={(e) => setNewTournament({ ...newTournament, entry_fee: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border rounded-lg font-mono font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Declared Prize Pool (₹) <span className="text-rose-500">*</span></label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      value={newTournament.prize_pool}
+                      onChange={(e) => setNewTournament({ ...newTournament, prize_pool: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border rounded-lg font-mono font-bold text-emerald-600 border-emerald-200"
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Tournament Dates */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Start Date <span className="text-rose-500">*</span></label>
+                    <input
+                      type="date"
+                      required
+                      value={newTournament.start_date}
+                      onChange={(e) => setNewTournament({ ...newTournament, start_date: e.target.value })}
+                      className="w-full px-2 py-2 border rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">End Date <span className="text-rose-500">*</span></label>
+                    <input
+                      type="date"
+                      required
+                      value={newTournament.end_date}
+                      onChange={(e) => setNewTournament({ ...newTournament, end_date: e.target.value })}
+                      className="w-full px-2 py-2 border rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Reg. Deadline <span className="text-rose-500">*</span></label>
+                    <input
+                      type="date"
+                      required
+                      value={newTournament.registration_deadline}
+                      onChange={(e) => setNewTournament({ ...newTournament, registration_deadline: e.target.value })}
+                      className="w-full px-2 py-2 border rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* 7. Tournament Rules */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tournament Rules & Guidelines</label>
+                  <textarea
+                    rows={2}
+                    value={newTournament.rules}
+                    onChange={(e) => setNewTournament({ ...newTournament, rules: e.target.value })}
+                    placeholder="Specify match rules, halves duration, squad limits..."
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full mt-3 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-lg shadow-sm transition"
+                >
+                  🚀 Publish Tournament Cup
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─── MODAL 6: ADD EQUIPMENT ─────────────────────────────────────────── */}
       {showAddEquipmentModal && (
@@ -1371,19 +1588,10 @@ const OwnerDashboardPage = () => {
             {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold">{modalError}</div>}
             <form onSubmit={handleAddEquipmentSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Turf</label>
-                <select
-                  value={newEquipment.turf_id}
-                  onChange={(e) => setNewEquipment(prev => ({ ...prev, turf_id: Number(e.target.value) }))}
-                  className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
-                >
-                  {myTurfs.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.city})
-                    </option>
-                  ))}
-                  {myTurfs.length === 0 && <option value="">No Turfs Owned</option>}
-                </select>
+                <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-500">Turf Venue:</span>
+                  <strong className="font-bold text-slate-900">{myTurfs[0]?.name || 'Your Turf'} ({myTurfs[0]?.city || 'Kerala'})</strong>
+                </div>
               </div>
 
 
@@ -1453,7 +1661,7 @@ const OwnerDashboardPage = () => {
                   />
                 </div>
               </div>
-              
+
               {newEquipment.category && (
                 <div className="p-2 rounded bg-slate-50 border border-slate-200 text-[11px] text-slate-500 flex justify-between">
                   <span>Category Tag: <strong className="text-slate-800">{newEquipment.category}</strong></span>
@@ -1467,73 +1675,146 @@ const OwnerDashboardPage = () => {
         </div>
       )}
 
-      {/* ─── MODAL 7: EDIT TURF DETAILS & PHOTO ────────────────────────────── */}
+      {/* ─── MODAL 7: EDIT TURF PROFILE ───────────────────────────────────── */}
       {showEditTurfModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-md relative fade-in max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-lg relative fade-in max-h-[90vh] overflow-y-auto">
             <button onClick={() => setShowEditTurfModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
-            <h3 className="text-base font-bold text-slate-900 mb-1">Edit Turf Details & Photo</h3>
-            <p className="text-xs text-slate-500 mb-4">Update your turf name, location, and upload facility photo for customer bookings.</p>
+            <h3 className="text-base font-bold text-slate-900 mb-1">Edit Turf Profile & Details</h3>
+            <p className="text-xs text-slate-500 mb-4">Update facility details, sports offered, amenities, location, and photos under your registered turf name.</p>
             {modalSuccess && <div className="p-3 mb-3 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">{modalSuccess}</div>}
             {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold">{modalError}</div>}
-            
-            <form onSubmit={handleSaveTurfDetails} className="space-y-3 text-xs">
+
+            <form onSubmit={handleSaveTurfDetails} className="space-y-3.5 text-xs">
+
+              {/* Registered Turf Name */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Turf Name</label>
+                <label className="block font-semibold text-slate-700 mb-1">Turf / Facility Name</label>
                 <input
                   type="text"
                   required
                   value={editingTurf.name}
                   onChange={(e) => setEditingTurf({ ...editingTurf, name: e.target.value })}
-                  placeholder="e.g. Azteca Sports Arena"
-                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="e.g. Sidharth Arena"
+                  className="w-full px-3 py-2 border rounded-lg font-bold text-slate-900 bg-slate-50"
                 />
+                <p className="text-[10px] text-slate-500 mt-1">This matches your registered business name approved by Administrator.</p>
               </div>
 
+              {/* City & Starting Price */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">City / District</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Select District / City</label>
                   <select
                     value={editingTurf.city}
                     onChange={(e) => setEditingTurf({ ...editingTurf, city: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
                   >
-                    <option value="Ernakulam">Ernakulam</option>
-                    <option value="Kochi">Kochi</option>
-                    <option value="Thiruvananthapuram">Thiruvananthapuram</option>
-                    <option value="Kozhikode">Kozhikode</option>
-                    <option value="Malappuram">Malappuram</option>
-                    <option value="Thrissur">Thrissur</option>
-                    <option value="Kannur">Kannur</option>
-                    <option value="Kottayam">Kottayam</option>
+                    {KERALA_DISTRICTS.map(dist => (
+                      <option key={dist} value={dist}>{dist}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Starting Price (₹/hr)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Starting Rate (₹/hr)</label>
                   <input
                     type="number"
                     required
+                    min="1"
                     value={editingTurf.starting_price}
                     onChange={(e) => setEditingTurf({ ...editingTurf, starting_price: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border rounded-lg font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Address & Pincode */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="block font-semibold text-slate-700 mb-1">Street Address / Location</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingTurf.address}
+                    onChange={(e) => setEditingTurf({ ...editingTurf, address: e.target.value })}
+                    placeholder="e.g. Near Stadium Road, Kakkanad"
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Pincode</label>
+                  <input
+                    type="text"
+                    value={editingTurf.pincode}
+                    onChange={(e) => setEditingTurf({ ...editingTurf, pincode: e.target.value })}
+                    placeholder="682017"
                     className="w-full px-3 py-2 border rounded-lg"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Address / Landmark</label>
-                <input
-                  type="text"
-                  value={editingTurf.address}
-                  onChange={(e) => setEditingTurf({ ...editingTurf, address: e.target.value })}
-                  placeholder="e.g. Kaloor Stadium Road, Ernakulam"
-                  className="w-full px-3 py-2 border rounded-lg font-medium"
-                />
+              {/* Contact Phone & Email */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Facility Phone</label>
+                  <input
+                    type="text"
+                    value={editingTurf.contact_phone}
+                    onChange={(e) => setEditingTurf({ ...editingTurf, contact_phone: e.target.value })}
+                    placeholder="e.g. 9847012345"
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Facility Email</label>
+                  <input
+                    type="email"
+                    value={editingTurf.contact_email}
+                    onChange={(e) => setEditingTurf({ ...editingTurf, contact_email: e.target.value })}
+                    placeholder="owner@playsport.com"
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
               </div>
 
+              {/* Operating Hours & Dimensions */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Opening Time</label>
+                  <input
+                    type="text"
+                    value={editingTurf.opening_time}
+                    onChange={(e) => setEditingTurf({ ...editingTurf, opening_time: e.target.value })}
+                    placeholder="06:00 AM"
+                    className="w-full px-3 py-2 border rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Closing Time</label>
+                  <input
+                    type="text"
+                    value={editingTurf.closing_time}
+                    onChange={(e) => setEditingTurf({ ...editingTurf, closing_time: e.target.value })}
+                    placeholder="11:00 PM"
+                    className="w-full px-3 py-2 border rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Turf Size / Dim.</label>
+                  <input
+                    type="text"
+                    value={editingTurf.dimension_text}
+                    onChange={(e) => setEditingTurf({ ...editingTurf, dimension_text: e.target.value })}
+                    placeholder="6000 sq ft"
+                    className="w-full px-3 py-2 border rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Sports Supported Checkboxes */}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1.5">
-                  Sports Offered (Select Multiple)
+                  Sports Offered at Facility
                 </label>
                 <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                   {[
@@ -1543,7 +1824,8 @@ const OwnerDashboardPage = () => {
                     { label: '🏸 Badminton', val: 'Badminton' },
                     { label: '🎾 Tennis', val: 'Tennis' },
                     { label: '🏐 Volleyball', val: 'Volleyball' },
-                    { label: '🏀 Basketball', val: 'Basketball' }
+                    { label: '🏀 Basketball', val: 'Basketball' },
+                    { label: '🏓 Table Tennis', val: 'Table Tennis' }
                   ].map((sport) => {
                     const isSelected = (editingTurf.sports_supported || '').includes(sport.val);
                     return (
@@ -1563,11 +1845,10 @@ const OwnerDashboardPage = () => {
                           }
                           setEditingTurf({ ...editingTurf, sports_supported: updatedList.join(', ') });
                         }}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-between border ${
-                          isSelected
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-between border ${isSelected
                             ? 'bg-brand-700 text-white border-brand-700 shadow-2xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                        }`}
+                          }`}
                       >
                         <span>{sport.label}</span>
                         <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${isSelected ? 'bg-white text-brand-700 font-black' : 'border border-slate-300 text-transparent'}`}>
@@ -1577,21 +1858,64 @@ const OwnerDashboardPage = () => {
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Selected: <strong className="text-brand-700 font-bold">{editingTurf.sports_supported || 'None selected'}</strong>
-                </p>
               </div>
 
+              {/* Facilities / Amenities Checkboxes */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  Facilities & Amenities
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  {[
+                    "Free Parking",
+                    "Changing Rooms",
+                    "Drinking Water",
+                    "LED Floodlights",
+                    "Spectator Seating",
+                    "First Aid Kit",
+                    "Cafeteria",
+                    "Locker Rooms"
+                  ].map((fac) => {
+                    const currentFacs = editingTurf.facilities || [];
+                    const isSelected = currentFacs.includes(fac);
+                    return (
+                      <button
+                        key={fac}
+                        type="button"
+                        onClick={() => {
+                          let updatedFacs;
+                          if (isSelected) {
+                            updatedFacs = currentFacs.filter(f => f !== fac);
+                          } else {
+                            updatedFacs = [...currentFacs, fac];
+                          }
+                          setEditingTurf({ ...editingTurf, facilities: updatedFacs });
+                        }}
+                        className={`py-1.5 px-2.5 rounded-lg text-[11px] font-semibold transition flex items-center justify-between border ${isSelected
+                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                          }`}
+                      >
+                        <span>{fac}</span>
+                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${isSelected ? 'bg-white text-emerald-800 font-bold' : 'border border-slate-300 text-transparent'}`}>
+                          ✓
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Turf Cover Photo & Live Upload */}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Turf Cover Photo (JPG, PNG, WEBP only) *
+                  Turf Facility Cover Photo (JPG, PNG, WEBP)
                 </label>
 
-                {/* Local File Upload Button */}
                 <div className="mb-2">
                   <label className="w-full cursor-pointer py-2 px-3 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 transition">
                     <Upload className="w-4 h-4 text-brand-600" />
-                    <span>Upload Image File (.jpg, .png, .webp)</span>
+                    <span>Upload Local Image File (.jpg, .png, .webp)</span>
                     <input
                       type="file"
                       accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
@@ -1630,56 +1954,32 @@ const OwnerDashboardPage = () => {
                   placeholder="Or paste HD image URL (https://...)"
                   className="w-full px-3 py-2 border rounded-lg font-mono text-[11px]"
                 />
-                
+
                 {/* Live Photo Preview */}
                 {editingTurf.image_url && isSupportedImage(editingTurf.image_url) && (
                   <div className="mt-2.5 space-y-1">
-                    <p className="text-[11px] font-bold text-slate-600">Selected Cover Photo Preview:</p>
+                    <p className="text-[11px] font-bold text-slate-600">Cover Photo Preview:</p>
                     <div className="h-36 w-full rounded-xl border-2 border-brand-300 overflow-hidden relative shadow-sm">
                       <img src={editingTurf.image_url} alt="Live Cover Preview" className="w-full h-full object-cover" />
                     </div>
                   </div>
                 )}
-
-                {/* Photo Presets */}
-                <div className="mt-2.5 space-y-1.5">
-                  <p className="text-[11px] font-semibold text-slate-600">Quick Photo Presets:</p>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[
-                      { lbl: 'Floodlight Pitch', url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80' },
-                      { lbl: 'FIFA Astro Turf', url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80' },
-                      { lbl: 'Box Cricket Pitch', url: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=800&q=80' },
-                      { lbl: 'Night Stadium', url: 'https://images.unsplash.com/photo-1551958219-acbc608c6377?auto=format&fit=crop&w=800&q=80' }
-                    ].map((p, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setEditingTurf({ ...editingTurf, image_url: p.url });
-                          setModalError("");
-                        }}
-                        className={`h-12 rounded-lg border overflow-hidden relative transition ${editingTurf.image_url === p.url ? 'ring-2 ring-brand-500 border-brand-500' : 'border-slate-200 opacity-70 hover:opacity-100'}`}
-                      >
-                        <img src={p.url} alt={p.lbl} className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
 
+              {/* Description */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Description</label>
+                <label className="block font-semibold text-slate-700 mb-1">Facility Description</label>
                 <textarea
-                  rows="2"
+                  rows="3"
                   value={editingTurf.description}
                   onChange={(e) => setEditingTurf({ ...editingTurf, description: e.target.value })}
-                  placeholder="Describe your sports facility features..."
+                  placeholder="Describe your sports turf facilities, lighting, surface quality..."
                   className="w-full px-3 py-2 border rounded-lg"
                 />
               </div>
 
-              <button type="submit" className="w-full mt-3 py-2.5 bg-brand-700 text-white font-bold rounded-lg hover:bg-brand-800">
-                Save Turf Photo & Details
+              <button type="submit" className="w-full mt-3 py-2.5 bg-brand-700 hover:bg-brand-800 text-white font-bold rounded-lg shadow-sm transition">
+                💾 Save Turf Profile Details
               </button>
             </form>
           </div>
@@ -1722,6 +2022,48 @@ const OwnerDashboardPage = () => {
                 className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
               >
                 {deletingMatchId === confirmDeleteMatch.id ? 'Deleting...' : 'Yes, Delete Match'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 8B: DELETE TOURNAMENT CONFIRMATION ───────────────────────── */}
+      {confirmDeleteTournament && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-md relative fade-in space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-rose-500" /> Cancel Tournament
+              </h3>
+              <button onClick={() => setConfirmDeleteTournament(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-rose-50 p-4 rounded-xl border border-rose-200/80 text-xs space-y-1">
+              <p className="font-bold text-rose-900">Are you sure you want to cancel this tournament?</p>
+              <p className="text-rose-700">
+                Tournament: <strong className="font-bold">{confirmDeleteTournament.title}</strong>
+              </p>
+              <p className="text-rose-600 text-[11px] pt-1">
+                This will permanently delete the tournament and remove all registered teams.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={() => setConfirmDeleteTournament(null)}
+                className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleConfirmDeleteTournament}
+                disabled={deletingTournamentId === confirmDeleteTournament.id}
+                className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+              >
+                {deletingTournamentId === confirmDeleteTournament.id ? 'Cancelling...' : 'Yes, Cancel Tournament'}
               </button>
             </div>
           </div>
@@ -1805,11 +2147,10 @@ const OwnerDashboardPage = () => {
                           }
                           setNewTurfData({ ...newTurfData, sports_supported: updatedList.join(', ') });
                         }}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-between border ${
-                          isSelected
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-between border ${isSelected
                             ? 'bg-brand-700 text-white border-brand-700 shadow-2xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                        }`}
+                          }`}
                       >
                         <span>{sport.label}</span>
                         <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${isSelected ? 'bg-white text-brand-700 font-black' : 'border border-slate-300 text-transparent'}`}>

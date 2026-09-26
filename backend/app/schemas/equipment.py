@@ -13,7 +13,7 @@ class EquipmentBase(BaseModel):
     description: Optional[str] = None
 
 class EquipmentCreate(EquipmentBase):
-    turf_id: int
+    turf_id: Optional[int] = None
 
 class EquipmentOut(EquipmentBase):
     id: int

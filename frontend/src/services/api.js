@@ -76,6 +76,7 @@ export const tournamentsAPI = {
   getAll: (params) => api.get('/tournaments', { params }),
   create: (tournData) => api.post('/tournaments', tournData),
   registerTeam: (id, teamData) => api.post(`/tournaments/${id}/register-team`, teamData),
+  delete: (id) => api.delete(`/tournaments/${id}`),
 };
 
 export const equipmentAPI = {

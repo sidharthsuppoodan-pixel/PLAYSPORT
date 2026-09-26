@@ -20,6 +20,7 @@ const TournamentsPage = ({ onOpenAuth }) => {
   const [registeringTourn, setRegisteringTourn] = useState(null);
   const [teamForm, setTeamForm] = useState({
     team_name: '',
+    captain_name: '',
     contact_phone: '',
     members_count: 7,
   });
@@ -45,6 +46,13 @@ const TournamentsPage = ({ onOpenAuth }) => {
     e.preventDefault();
     if (!isAuthenticated) {
       onOpenAuth('login');
+      return;
+    }
+    
+    // Add custom frontend validation
+    if (!/^[0-9]{10,15}$/.test(teamForm.contact_phone)) {
+      setErrorMsg("Please enter a valid 10 to 15 digit phone number.");
+      setTimeout(() => setErrorMsg(''), 4000);
       return;
     }
 
@@ -158,6 +166,7 @@ const TournamentsPage = ({ onOpenAuth }) => {
                     if (!isAuthenticated) {
                       onOpenAuth('login');
                     } else {
+                      setTeamForm(prev => ({ ...prev, captain_name: user?.full_name || '' }));
                       setRegisteringTourn(t);
                     }
                   }}
@@ -183,11 +192,11 @@ const TournamentsPage = ({ onOpenAuth }) => {
             </button>
 
             <h3 className="text-base font-bold text-slate-900 mb-1">Register Team for {registeringTourn.title}</h3>
-            <p className="text-xs text-slate-500 mb-4">Captain: {user?.full_name}</p>
+            <p className="text-xs text-slate-500 mb-4">Register your squad to compete.</p>
 
             <form onSubmit={handleRegisterTeamSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Team Name</label>
+                <label className="block font-semibold text-slate-700 mb-1">Team Name <span className="text-rose-500">*</span></label>
                 <input
                   type="text"
                   required
@@ -199,13 +208,27 @@ const TournamentsPage = ({ onOpenAuth }) => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Captain Phone Number</label>
+                <label className="block font-semibold text-slate-700 mb-1">Captain's Name <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Full Name"
+                  value={teamForm.captain_name}
+                  onChange={(e) => setTeamForm({ ...teamForm, captain_name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Captain Phone Number <span className="text-rose-500">*</span></label>
                 <input
                   type="tel"
                   required
+                  pattern="^[0-9]{10,15}$"
+                  title="Please enter a valid 10 to 15 digit phone number"
                   placeholder="10-digit mobile number"
                   value={teamForm.contact_phone}
-                  onChange={(e) => setTeamForm({ ...teamForm, contact_phone: e.target.value })}
+                  onChange={(e) => setTeamForm({ ...teamForm, contact_phone: e.target.value.replace(/\D/g, '') })}
                   className="w-full px-3 py-2 border rounded-lg"
                 />
               </div>
