@@ -57,9 +57,6 @@ python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Seed the database with demo users, turfs, slots, and matches
-python seed.py
-
 # Launch FastAPI development server
 uvicorn app.main:app --reload --port 8000
 ```
@@ -109,7 +106,6 @@ playsport/
 │   │   ├── schemas/        # Pydantic validation schemas
 │   │   └── main.py         # FastAPI application entry
 │   ├── tests/              # Pytest test suite
-│   ├── seed.py             # Rich database seeder matching Stitch UI
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/

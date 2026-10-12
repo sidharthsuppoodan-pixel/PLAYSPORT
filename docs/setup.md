@@ -27,11 +27,7 @@
    ```bash
    pip install -r requirements.txt
    ```
-4. Seed the database with the pre-configured entities matching the Stitch design:
-   ```bash
-   python seed.py
-   ```
-5. Start the FastAPI development server:
+4. Start the FastAPI development server:
    ```bash
    uvicorn app.main:app --reload --port 8000
    ```
@@ -63,4 +59,4 @@ To connect PLAYSPORT to a live PostgreSQL instance:
    ```env
    DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/playsport_db
    ```
-2. Re-run `python seed.py` to generate tables and initial datasets in PostgreSQL.
+2. Start backend server; tables will automatically be created in PostgreSQL on startup.

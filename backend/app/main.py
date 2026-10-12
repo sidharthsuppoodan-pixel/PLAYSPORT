@@ -26,6 +26,34 @@ from app.api.reports import router as reports_router
 async def lifespan(app: FastAPI):
     # Ensure database schema is created
     Base.metadata.create_all(bind=engine)
+    
+    # Ensure primary Super Admin user exists
+    from app.core.database import SessionLocal
+    from app.core.security import get_password_hash
+    from app.models.user import User, RoleEnum
+    
+    db = SessionLocal()
+    try:
+        admin_user = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
+        if not admin_user:
+            admin = User(
+                email=settings.ADMIN_EMAIL,
+                username=settings.ADMIN_USERNAME,
+                full_name=settings.ADMIN_NAME,
+                phone=settings.ADMIN_PHONE,
+                hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                role=RoleEnum.ADMIN,
+                is_active=True,
+                is_verified=True,
+                is_approved=True
+            )
+            db.add(admin)
+            db.commit()
+    except Exception as e:
+        db.rollback()
+    finally:
+        db.close()
+        
     yield
 
 app = FastAPI(

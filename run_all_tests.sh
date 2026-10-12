@@ -49,11 +49,9 @@ echo "⚠️  Note: This assumes your FastAPI and React servers are running."
 # Activate virtual environment again for the root tests folder
 source backend/venv/bin/activate
 
-# Reset the database to ensure we have available slots and clean state for E2E tests
-echo "   (Resetting database state for E2E consistency...)"
+# Ensure schema is verified
 cd backend
-python seed.py --reset-all-data > /dev/null
-python seed_slots.py > /dev/null
+python -c "from app.core.database import engine, Base; import app.models; Base.metadata.create_all(bind=engine)"
 cd ..
 
 # Run the E2E suite and generate an HTML report
