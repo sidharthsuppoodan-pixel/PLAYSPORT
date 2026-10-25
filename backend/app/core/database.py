@@ -10,6 +10,14 @@ db_url = settings.DATABASE_URL
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
+# Neon PostgreSQL connection optimization:
+# Strip '-pooler.' to ensure direct connection to PostgreSQL tables without PgBouncer schema isolation
+if "-pooler." in db_url:
+    db_url = db_url.replace("-pooler.", ".")
+
+if "channel_binding=" in db_url:
+    db_url = db_url.replace("&channel_binding=require", "").replace("channel_binding=require&", "").replace("channel_binding=require", "")
+
 try:
     engine = create_engine(
         db_url,
