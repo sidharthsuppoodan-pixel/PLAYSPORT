@@ -26,6 +26,11 @@ from app.api.reports import router as reports_router
 async def lifespan(app: FastAPI):
     # Ensure database schema is created
     Base.metadata.create_all(bind=engine)
+    try:
+        from seed import seed_database
+        seed_database(reset_db=False)
+    except Exception as e:
+        print(f"Startup seed notice: {e}")
     yield
 
 app = FastAPI(
