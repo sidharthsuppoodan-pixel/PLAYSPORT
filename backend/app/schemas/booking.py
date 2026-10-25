@@ -32,6 +32,17 @@ class BookingOut(BaseModel):
     class Config:
         from_attributes = True
 
+class EquipmentRentalItemOut(BaseModel):
+    id: Optional[int] = None
+    equipment_id: int
+    name: str
+    category: Optional[str] = "General"
+    quantity: int
+    total_price: float
+
+    class Config:
+        from_attributes = True
+
 class BookingDetailOut(BookingOut):
     turf_name: str
     turf_address: str
@@ -41,6 +52,7 @@ class BookingDetailOut(BookingOut):
     customer_phone: Optional[str] = None
     payment_status: Optional[str] = "SUCCESS"
     payment_id: Optional[str] = None
+    equipment_rentals: List[EquipmentRentalItemOut] = []
 
     class Config:
         from_attributes = True

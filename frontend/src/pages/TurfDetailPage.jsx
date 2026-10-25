@@ -29,6 +29,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
   const [dateGroups, setDateGroups] = useState([]);
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);
   const [selectedSlotIds, setSelectedSlotIds] = useState([]);
+  const [selectedEquipment, setSelectedEquipment] = useState({});
   const [reviews, setReviews] = useState([]);
   const [equipmentList, setEquipmentList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
     const fetchTurfData = async () => {
       setLoading(true);
       try {
-        const slugParam = idOrSlug || 'playzone-arena';
+        const slugParam = idOrSlug || 'strikers-sports-arena';
         const res = await turfsAPI.getByIdOrSlug(slugParam);
         setTurf(res.data);
 
@@ -81,11 +82,41 @@ const TurfDetailPage = ({ onOpenAuth }) => {
     }
   };
 
-  const calculateTotalPrice = () => {
+  const handleEquipmentChange = (eqId, delta, maxAvailable) => {
+    setSelectedEquipment(prev => {
+      const current = prev[eqId] || 0;
+      const next = Math.max(0, Math.min(maxAvailable, current + delta));
+      if (next === 0) {
+        const copy = { ...prev };
+        delete copy[eqId];
+        return copy;
+      }
+      return { ...prev, [eqId]: next };
+    });
+  };
+
+  const calculateSlotsPrice = () => {
     if (!activeDateGroup) return 0;
     const selectedSlots = activeDateGroup.slots.filter(s => selectedSlotIds.includes(s.id));
     return selectedSlots.reduce((sum, s) => sum + s.price, 0);
   };
+
+  const calculateEquipmentPrice = () => {
+    const hours = Math.max(1, selectedSlotIds.length);
+    let total = 0;
+    for (const [eqId, qty] of Object.entries(selectedEquipment)) {
+      const item = equipmentList.find(e => e.id === Number(eqId));
+      if (item && qty > 0) {
+        total += item.price_per_hour * qty * hours;
+      }
+    }
+    return total;
+  };
+
+  const slotsPrice = calculateSlotsPrice();
+  const equipmentPrice = calculateEquipmentPrice();
+  const grandTotalPrice = slotsPrice + equipmentPrice;
+  const totalEquipmentCount = Object.values(selectedEquipment).reduce((sum, q) => sum + q, 0);
 
   const handleProceedBooking = async () => {
     if (!isAuthenticated) {
@@ -103,13 +134,21 @@ const TurfDetailPage = ({ onOpenAuth }) => {
 
     try {
       const groundId = turf.grounds[0].id;
+      const equipmentRentalsPayload = Object.entries(selectedEquipment)
+        .filter(([_, qty]) => qty > 0)
+        .map(([eqId, qty]) => ({
+          equipment_id: Number(eqId),
+          quantity: Number(qty)
+        }));
+
       const payload = {
         turf_id: turf.id,
         ground_id: groundId,
         booking_date: activeDateGroup.date,
         slot_ids: selectedSlotIds,
         payment_method: 'UPI',
-        customer_notes: 'Booked via PLAYSPORT web portal'
+        customer_notes: 'Booked via PLAYSPORT web portal',
+        equipment_rentals: equipmentRentalsPayload.length > 0 ? equipmentRentalsPayload : undefined
       };
 
       const res = await bookingsAPI.create(payload);
@@ -125,6 +164,18 @@ const TurfDetailPage = ({ onOpenAuth }) => {
         });
       }
       setSelectedSlotIds([]);
+      setSelectedEquipment({});
+
+      // Update equipment available quantities locally
+      if (equipmentRentalsPayload.length > 0) {
+        setEquipmentList(prev => prev.map(eq => {
+          const rented = equipmentRentalsPayload.find(r => r.equipment_id === eq.id);
+          if (rented) {
+            return { ...eq, available_quantity: Math.max(0, eq.available_quantity - rented.quantity) };
+          }
+          return eq;
+        }));
+      }
     } catch (err) {
       console.error("Booking failed", err);
       setErrorMessage(err.response?.data?.detail || "Booking failed. Slot may have been taken.");
@@ -162,9 +213,6 @@ const TurfDetailPage = ({ onOpenAuth }) => {
       </div>
     );
   }
-
-  const selectedCount = selectedSlotIds.length;
-  const totalPrice = calculateTotalPrice();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
@@ -430,6 +478,100 @@ const TurfDetailPage = ({ onOpenAuth }) => {
               )}
             </div>
 
+            {/* Rental Equipment Section for Slot Booking */}
+            <div className="pt-3 border-t border-slate-100 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Dumbbell className="w-3.5 h-3.5 text-brand-600" />
+                  Rent Turf Equipment
+                </label>
+                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  Optional
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Gear up for your match — balls, bibs, rackets & bats available on pitch.
+              </p>
+
+              {equipmentList && equipmentList.length > 0 ? (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {equipmentList.map((eq) => {
+                    const qty = selectedEquipment[eq.id] || 0;
+                    const hours = Math.max(1, selectedSlotIds.length);
+                    const isOutOfStock = eq.available_quantity <= 0;
+
+                    return (
+                      <div
+                        key={eq.id}
+                        className={`p-2.5 rounded-xl border transition flex items-center justify-between text-xs ${
+                          qty > 0
+                            ? 'border-brand-400 bg-brand-50/50 shadow-2xs'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          <span className="text-lg shrink-0">
+                            {eq.category === 'Balls' ? '⚽' :
+                             eq.category === 'Bats' ? '🏏' :
+                             eq.category === 'Rackets' ? '🏸' : '🦺'}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 truncate text-[11px]">{eq.name}</p>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                              <span className="font-semibold text-brand-700">₹{eq.price_per_hour}/hr</span>
+                              <span>•</span>
+                              <span className={isOutOfStock ? 'text-rose-500 font-semibold' : 'text-slate-400'}>
+                                {isOutOfStock ? 'Out of stock' : `${eq.available_quantity} available`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Quantity Stepper */}
+                        <div className="shrink-0 flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                          {qty > 0 ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleEquipmentChange(eq.id, -1, eq.available_quantity)}
+                                className="w-5 h-5 flex items-center justify-center rounded bg-white hover:bg-slate-200 text-slate-700 font-bold transition text-xs shadow-2xs"
+                              >
+                                -
+                              </button>
+                              <span className="w-5 text-center font-bold text-slate-900 text-xs">
+                                {qty}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={qty >= eq.available_quantity}
+                                onClick={() => handleEquipmentChange(eq.id, 1, eq.available_quantity)}
+                                className="w-5 h-5 flex items-center justify-center rounded bg-brand-700 hover:bg-brand-800 text-white font-bold transition text-xs disabled:opacity-40 shadow-2xs"
+                              >
+                                +
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isOutOfStock}
+                              onClick={() => handleEquipmentChange(eq.id, 1, eq.available_quantity)}
+                              className="px-2.5 py-1 rounded bg-white hover:bg-brand-50 border border-slate-200 hover:border-brand-300 text-brand-700 font-bold text-[11px] transition disabled:opacity-40"
+                            >
+                              + Add
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 text-center">
+                  No rental equipment listed for this turf.
+                </div>
+              )}
+            </div>
+
             {/* Error banner */}
             {errorMessage && (
               <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
@@ -438,11 +580,27 @@ const TurfDetailPage = ({ onOpenAuth }) => {
               </div>
             )}
 
-            {/* Summary Price & Action Button Matching Stitch Screenshot 1 */}
+            {/* Summary Price & Action Button */}
             <div className="pt-3 border-t border-slate-100 space-y-3">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-slate-600">Selected Slots ({selectedCount})</span>
-                <span className="text-slate-900 text-sm font-extrabold">₹{totalPrice}</span>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Slot Booking ({selectedSlotIds.length} slot{selectedSlotIds.length === 1 ? '' : 's'})</span>
+                  <span className="font-bold text-slate-800">₹{slotsPrice}</span>
+                </div>
+
+                {equipmentPrice > 0 && (
+                  <div className="flex items-center justify-between text-emerald-700 font-medium">
+                    <span className="flex items-center gap-1">
+                      <span>🎽 Gear Rentals ({totalEquipmentCount} item{totalEquipmentCount === 1 ? '' : 's'})</span>
+                    </span>
+                    <span className="font-bold">+₹{equipmentPrice}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between text-xs font-bold pt-1.5 border-t border-slate-100">
+                  <span className="text-slate-900">Total Payable</span>
+                  <span className="text-base font-extrabold text-brand-700">₹{grandTotalPrice}</span>
+                </div>
               </div>
 
               <button
@@ -450,7 +608,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
                 disabled={bookingLoading}
                 className="w-full py-3 px-4 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-brand-700/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {bookingLoading ? 'Reserving...' : 'Proceed to Booking →'}
+                {bookingLoading ? 'Reserving...' : `Proceed to Booking (₹${grandTotalPrice}) →`}
               </button>
             </div>
 

@@ -202,6 +202,15 @@ def update_turf(
     for field, value in update_data.items():
         setattr(turf, field, value)
         
+    # Synchronize grounds hourly rates if starting_price changed
+    if "starting_price" in update_data and update_data["starting_price"]:
+        for g in turf.grounds:
+            g.hourly_rate = float(update_data["starting_price"])
+            
+    # Also sync owner business name if changed by owner
+    if "name" in update_data and update_data["name"] and current_user.role == RoleEnum.OWNER:
+        current_user.business_name = update_data["name"]
+        
     db.commit()
     db.refresh(turf)
     return turf

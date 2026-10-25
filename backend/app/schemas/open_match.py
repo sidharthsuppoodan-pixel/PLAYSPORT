@@ -8,6 +8,8 @@ class MatchParticipantOut(BaseModel):
     user_id: int
     full_name: str
     username: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
     team_slot: str
     joined_at: datetime
 
@@ -34,6 +36,8 @@ class OpenMatchCreate(OpenMatchBase):
 class OpenMatchOut(OpenMatchBase):
     id: int
     creator_id: int
+    creator_name: Optional[str] = None
+    creator_phone: Optional[str] = None
     current_players: int
     status: MatchStatusEnum
     turf_name: str

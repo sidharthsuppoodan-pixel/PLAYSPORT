@@ -1,5 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user, require_owner_or_admin
@@ -35,7 +36,7 @@ def list_tournaments(
                 id=tm.id,
                 team_name=tm.team_name,
                 captain_id=tm.captain_id,
-                captain_name=cap.full_name if cap else "Captain",
+                captain_name=tm.captain_name or (cap.full_name if cap else "Team Captain"),
                 contact_phone=tm.contact_phone,
                 members_count=tm.members_count,
                 created_at=tm.created_at
@@ -168,14 +169,43 @@ def register_team(
     if not tourn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
 
+    if tourn.status in [TournamentStatusEnum.COMPLETED, TournamentStatusEnum.CANCELLED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Registration is closed. Tournament has {tourn.status.value.lower()}."
+        )
+
     if tourn.current_teams >= tourn.max_teams:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tournament team slots are full.")
+
+    # Check if this user has already registered a team
+    user_team = db.query(TournamentTeam).filter(
+        TournamentTeam.tournament_id == tourn.id,
+        TournamentTeam.captain_id == current_user.id
+    ).first()
+    if user_team:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"You have already registered team '{user_team.team_name}' for this tournament."
+        )
+
+    # Check for duplicate team name within this tournament
+    same_team = db.query(TournamentTeam).filter(
+        TournamentTeam.tournament_id == tourn.id,
+        func.lower(TournamentTeam.team_name) == func.lower(reg_in.team_name.strip())
+    ).first()
+    if same_team:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A team named '{reg_in.team_name.strip()}' is already registered in this tournament."
+        )
 
     team = TournamentTeam(
         tournament_id=tourn.id,
         captain_id=current_user.id,
-        team_name=reg_in.team_name,
-        contact_phone=reg_in.contact_phone,
+        captain_name=reg_in.captain_name.strip(),
+        team_name=reg_in.team_name.strip(),
+        contact_phone=reg_in.contact_phone.strip(),
         members_count=reg_in.members_count,
         payment_status="PAID",
         seed_number=tourn.current_teams + 1

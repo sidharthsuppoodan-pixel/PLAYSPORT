@@ -49,6 +49,7 @@ class TournamentTeam(Base):
     id = Column(Integer, primary_key=True, index=True)
     tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
     captain_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    captain_name = Column(String(100), nullable=True)
     
     team_name = Column(String(100), nullable=False)
     contact_phone = Column(String(20), nullable=False)

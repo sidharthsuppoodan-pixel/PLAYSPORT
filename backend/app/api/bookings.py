@@ -12,7 +12,7 @@ from app.models.payment import Payment, PaymentStatusEnum, PaymentMethodEnum
 from app.models.notification import Notification, NotificationTypeEnum
 from app.models.equipment import Equipment, EquipmentRental
 from app.models.user import User, RoleEnum
-from app.schemas.booking import BookingCreate, BookingOut, BookingDetailOut, BookingCancelRequest
+from app.schemas.booking import BookingCreate, BookingOut, BookingDetailOut, BookingCancelRequest, EquipmentRentalItemOut
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -64,10 +64,39 @@ def create_booking(
                 detail=f"Slot '{slot.start_time} - {slot.end_time}' is already booked. Double-booking prevented."
             )
 
-    # Calculate total price
-    total_amount = sum(slot.price for slot in selected_slots)
+    # Calculate slot price
+    slot_amount = sum(slot.price for slot in selected_slots)
     start_time_sorted = sorted([s.start_time for s in selected_slots])[0]
     end_time_sorted = sorted([s.end_time for s in selected_slots])[-1]
+    num_hours = max(1, len(selected_slots))
+
+    # Pre-validate and calculate equipment rental totals if provided
+    equipment_items_to_rent = []
+    equipment_amount = 0.0
+    if booking_in.equipment_rentals:
+        for eq_req in booking_in.equipment_rentals:
+            eq_id = eq_req.get("equipment_id")
+            qty = int(eq_req.get("quantity", 0))
+            if not eq_id or qty <= 0:
+                continue
+            eq_item = db.query(Equipment).filter(Equipment.id == eq_id, Equipment.turf_id == turf.id).first()
+            if not eq_item:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Equipment with ID {eq_id} not available at this turf.")
+            if eq_item.available_quantity < qty:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Only {eq_item.available_quantity} units of '{eq_item.name}' available for rent."
+                )
+            rental_cost = eq_item.price_per_hour * qty * num_hours
+            equipment_amount += rental_cost
+            equipment_items_to_rent.append({
+                "item": eq_item,
+                "quantity": qty,
+                "cost": rental_cost
+            })
+
+    total_amount = slot_amount + equipment_amount
+    final_amount = total_amount
 
     # Create Booking
     booking = Booking(
@@ -80,7 +109,7 @@ def create_booking(
         end_time=end_time_sorted,
         total_amount=total_amount,
         discount_amount=0.0,
-        final_amount=total_amount,
+        final_amount=final_amount,
         status=BookingStatusEnum.CONFIRMED,
         customer_notes=booking_in.customer_notes
     )
@@ -92,7 +121,7 @@ def create_booking(
         slot.status = SlotStatusEnum.BOOKED
         slot.booking_id = booking.id
 
-    # Create Payment record
+    # Create Payment record with total amount (slots + equipment)
     payment = Payment(
         booking_id=booking.id,
         user_id=current_user.id,
@@ -103,30 +132,39 @@ def create_booking(
     )
     db.add(payment)
 
-    # Process Equipment rentals if any
-    if booking_in.equipment_rentals:
-        for eq_req in booking_in.equipment_rentals:
-            eq_id = eq_req.get("equipment_id")
-            qty = eq_req.get("quantity", 1)
-            eq_item = db.query(Equipment).filter(Equipment.id == eq_id, Equipment.turf_id == turf.id).first()
-            if eq_item and eq_item.available_quantity >= qty:
-                eq_item.available_quantity -= qty
-                eq_rental = EquipmentRental(
-                    booking_id=booking.id,
-                    equipment_id=eq_item.id,
-                    user_id=current_user.id,
-                    quantity=qty,
-                    rental_date=booking_in.booking_date,
-                    total_price=eq_item.price_per_hour * qty,
-                    status="RENTED"
-                )
-                db.add(eq_rental)
+    # Process Equipment rentals
+    rental_outs = []
+    for eq_info in equipment_items_to_rent:
+        eq_item = eq_info["item"]
+        qty = eq_info["quantity"]
+        cost = eq_info["cost"]
+        eq_item.available_quantity -= qty
+        eq_rental = EquipmentRental(
+            booking_id=booking.id,
+            equipment_id=eq_item.id,
+            user_id=current_user.id,
+            quantity=qty,
+            rental_date=booking_in.booking_date,
+            total_price=cost,
+            status="RENTED"
+        )
+        db.add(eq_rental)
+        db.flush()
+        rental_outs.append(EquipmentRentalItemOut(
+            id=eq_rental.id,
+            equipment_id=eq_item.id,
+            name=eq_item.name,
+            category=eq_item.category,
+            quantity=qty,
+            total_price=cost
+        ))
 
     # Send Notification to Customer
+    gear_msg = f" + {len(rental_outs)} equipment item(s)" if rental_outs else ""
     notif = Notification(
         user_id=current_user.id,
         title="Booking Confirmed! ⚽",
-        message=f"Your booking {booking.booking_reference} for {turf.name} on {booking.booking_date} ({booking.start_time} - {booking.end_time}) is confirmed.",
+        message=f"Your booking {booking.booking_reference} for {turf.name} on {booking.booking_date} ({booking.start_time} - {booking.end_time}){gear_msg} is confirmed.",
         type=NotificationTypeEnum.BOOKING,
         link="/my-bookings"
     )
@@ -157,7 +195,8 @@ def create_booking(
         customer_email=current_user.email,
         customer_phone=current_user.phone,
         payment_status=payment.status.value,
-        payment_id=payment.transaction_id
+        payment_id=payment.transaction_id,
+        equipment_rentals=rental_outs
     )
 
 @router.get("/my-bookings", response_model=List[BookingDetailOut])
@@ -169,6 +208,18 @@ def get_my_bookings(
     results = []
     for b in bookings:
         pay = db.query(Payment).filter(Payment.booking_id == b.id).first()
+        rentals = db.query(EquipmentRental).filter(EquipmentRental.booking_id == b.id).all()
+        rental_outs = []
+        for r in rentals:
+            eq = db.query(Equipment).filter(Equipment.id == r.equipment_id).first()
+            rental_outs.append(EquipmentRentalItemOut(
+                id=r.id,
+                equipment_id=r.equipment_id,
+                name=eq.name if eq else "Equipment",
+                category=eq.category if eq else "General",
+                quantity=r.quantity,
+                total_price=r.total_price
+            ))
         results.append(BookingDetailOut(
             id=b.id,
             booking_reference=b.booking_reference,
@@ -191,7 +242,8 @@ def get_my_bookings(
             customer_email=current_user.email,
             customer_phone=current_user.phone,
             payment_status=pay.status.value if pay else "SUCCESS",
-            payment_id=pay.transaction_id if pay else "TXN-0000"
+            payment_id=pay.transaction_id if pay else "TXN-0000",
+            equipment_rentals=rental_outs
         ))
     return results
 
@@ -209,6 +261,19 @@ def get_booking_detail(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     pay = db.query(Payment).filter(Payment.booking_id == booking.id).first()
+    rentals = db.query(EquipmentRental).filter(EquipmentRental.booking_id == booking.id).all()
+    rental_outs = []
+    for r in rentals:
+        eq = db.query(Equipment).filter(Equipment.id == r.equipment_id).first()
+        rental_outs.append(EquipmentRentalItemOut(
+            id=r.id,
+            equipment_id=r.equipment_id,
+            name=eq.name if eq else "Equipment",
+            category=eq.category if eq else "General",
+            quantity=r.quantity,
+            total_price=r.total_price
+        ))
+
     return BookingDetailOut(
         id=booking.id,
         booking_reference=booking.booking_reference,
@@ -231,7 +296,8 @@ def get_booking_detail(
         customer_email=booking.user.email if booking.user else "",
         customer_phone=booking.user.phone if booking.user else None,
         payment_status=pay.status.value if pay else "SUCCESS",
-        payment_id=pay.transaction_id if pay else None
+        payment_id=pay.transaction_id if pay else None,
+        equipment_rentals=rental_outs
     )
 
 @router.post("/{booking_id}/cancel", response_model=dict)
@@ -259,6 +325,14 @@ def cancel_booking(
     for s in slots:
         s.status = SlotStatusEnum.AVAILABLE
         s.booking_id = None
+
+    # Restock rented equipment back to available pool
+    rentals = db.query(EquipmentRental).filter(EquipmentRental.booking_id == booking.id).all()
+    for r in rentals:
+        r.status = "CANCELLED"
+        eq_item = db.query(Equipment).filter(Equipment.id == r.equipment_id).first()
+        if eq_item:
+            eq_item.available_quantity += r.quantity
 
     # Refund payment status
     pay = db.query(Payment).filter(Payment.booking_id == booking.id).first()

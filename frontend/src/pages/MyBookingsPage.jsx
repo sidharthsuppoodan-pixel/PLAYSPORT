@@ -157,6 +157,22 @@ const MyBookingsPage = ({ onOpenAuth }) => {
                   </div>
                 </div>
 
+                {bk.equipment_rentals && bk.equipment_rentals.length > 0 && (
+                  <div className="p-2.5 rounded-xl bg-brand-50/50 border border-brand-100 text-[11px] space-y-1">
+                    <span className="font-bold text-brand-800 flex items-center gap-1">
+                      <span>🎽</span> Rented Equipment ({bk.equipment_rentals.length}):
+                    </span>
+                    <div className="space-y-0.5 text-slate-700 pl-4">
+                      {bk.equipment_rentals.map((r, i) => (
+                        <div key={i} className="flex justify-between items-center text-[10px]">
+                          <span>{r.quantity}x {r.name}</span>
+                          <span className="font-semibold text-slate-900">+₹{r.total_price}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between text-xs pt-1">
                   <span className="text-slate-600">Total Paid:</span>
                   <span className="text-sm font-extrabold text-slate-900">₹{bk.final_amount}</span>
