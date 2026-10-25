@@ -6,7 +6,7 @@ from app.core.config import settings
 
 logger = logging.getLogger("uvicorn.error")
 
-db_url = settings.DATABASE_URL
+db_url = os.getenv("DATABASE_URL") or settings.DATABASE_URL
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
