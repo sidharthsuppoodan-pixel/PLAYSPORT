@@ -21,6 +21,8 @@ def get_initials(name: str) -> str:
         return parts[0][:2].upper()
     return "US"
 
+from app.models.open_match import OpenMatch, MatchParticipant, MatchStatusEnum
+
 @router.get("/owner-dashboard", response_model=OwnerDashboardMetricsOut)
 def get_owner_dashboard_metrics(
     current_user: User = Depends(require_owner_or_admin),
@@ -29,8 +31,8 @@ def get_owner_dashboard_metrics(
     if current_user.role == RoleEnum.ADMIN:
         turfs_count = db.query(Turf).count()
         matches_count = db.query(OpenMatch).filter(OpenMatch.status.in_([MatchStatusEnum.OPEN, MatchStatusEnum.IN_PROGRESS])).count()
-        bookings_count = db.query(Booking).count()
-        payments = db.query(Payment).filter(Payment.status == PaymentStatusEnum.SUCCESS).all()
+        bookings_count = db.query(Booking).filter(Booking.status == BookingStatusEnum.CONFIRMED).count()
+        payments = db.query(Payment).join(Booking).filter(Booking.status == BookingStatusEnum.CONFIRMED, Payment.status == PaymentStatusEnum.SUCCESS).all()
         rev_today = float(sum(p.amount for p in payments))
     else:
         turfs = db.query(Turf).filter(Turf.owner_id == current_user.id).all()
@@ -38,8 +40,8 @@ def get_owner_dashboard_metrics(
         turfs_count = len(turf_ids)
         
         matches_count = db.query(OpenMatch).filter(OpenMatch.turf_id.in_(turf_ids)).count() if turf_ids else 0
-        bookings_count = db.query(Booking).filter(Booking.turf_id.in_(turf_ids)).count() if turf_ids else 0
-        payments = db.query(Payment).join(Booking).filter(Booking.turf_id.in_(turf_ids), Payment.status == PaymentStatusEnum.SUCCESS).all() if turf_ids else []
+        bookings_count = db.query(Booking).filter(Booking.turf_id.in_(turf_ids), Booking.status == BookingStatusEnum.CONFIRMED).count() if turf_ids else 0
+        payments = db.query(Payment).join(Booking).filter(Booking.turf_id.in_(turf_ids), Booking.status == BookingStatusEnum.CONFIRMED, Payment.status == PaymentStatusEnum.SUCCESS).all() if turf_ids else []
         rev_today = float(sum(p.amount for p in payments))
 
     if rev_today >= 100000:
@@ -61,31 +63,76 @@ def get_recent_bookings_table(
     current_user: User = Depends(require_owner_or_admin),
     db: Session = Depends(get_db)
 ):
-    # Retrieve recent real bookings filtered by user role
+    # Retrieve ONLY CONFIRMED real bookings to prevent ghost "pending" or duplicate confusion
     if current_user.role == RoleEnum.ADMIN:
-        bookings = db.query(Booking).order_by(Booking.created_at.desc()).limit(10).all()
+        bookings = db.query(Booking).filter(
+            Booking.status == BookingStatusEnum.CONFIRMED
+        ).order_by(Booking.created_at.desc()).limit(15).all()
+        open_match_participants = db.query(MatchParticipant).join(OpenMatch).filter(
+            OpenMatch.status != MatchStatusEnum.CANCELLED
+        ).order_by(MatchParticipant.joined_at.desc()).limit(15).all()
     else:
         turfs = db.query(Turf).filter(Turf.owner_id == current_user.id).all()
         turf_ids = [t.id for t in turfs]
         if not turf_ids:
             return []
-        bookings = db.query(Booking).filter(Booking.turf_id.in_(turf_ids)).order_by(Booking.created_at.desc()).limit(10).all()
+        bookings = db.query(Booking).filter(
+            Booking.turf_id.in_(turf_ids),
+            Booking.status == BookingStatusEnum.CONFIRMED
+        ).order_by(Booking.created_at.desc()).limit(15).all()
+        open_match_participants = db.query(MatchParticipant).join(OpenMatch).filter(
+            OpenMatch.turf_id.in_(turf_ids),
+            OpenMatch.status != MatchStatusEnum.CANCELLED
+        ).order_by(MatchParticipant.joined_at.desc()).limit(15).all()
 
-    results = []
+    items = []
+    # 1. Regular turf slot bookings (Confirmed only)
     for b in bookings:
         cust_name = b.user.full_name if b.user else "Customer"
-        results.append(RecentBookingItem(
-            id=b.id,
-            booking_reference=f"#{b.booking_reference}",
-            customer_name=cust_name,
-            customer_initials=get_initials(cust_name),
-            turf_name=b.turf.name if b.turf else "Arena",
-            ground_name=b.ground.name if b.ground else "Main Ground",
-            time_display=f"Today, {b.start_time} - {b.end_time}",
-            status="Confirmed" if b.status == BookingStatusEnum.CONFIRMED else "Pending",
-            amount=b.final_amount
-        ))
-    return results
+        items.append({
+            "timestamp": b.created_at,
+            "data": RecentBookingItem(
+                id=b.id,
+                booking_reference=f"#{b.booking_reference}",
+                customer_name=cust_name,
+                customer_initials=get_initials(cust_name),
+                customer_phone=b.user.phone if b.user else None,
+                customer_email=b.user.email if b.user else None,
+                booking_type="Turf Slot",
+                turf_name=b.turf.name if b.turf else "Arena",
+                ground_name=b.ground.name if b.ground else "Main Ground",
+                time_display=f"Today, {b.start_time} - {b.end_time}",
+                status="CONFIRMED",
+                amount=b.final_amount
+            )
+        })
+
+    # 2. Players who booked / joined Open Matches at this turf
+    for p in open_match_participants:
+        cust_name = p.user.full_name if p.user else "Player"
+        match = p.match
+        turf_name = match.turf.name if (match and match.turf) else "My Turf"
+        items.append({
+            "timestamp": p.joined_at,
+            "data": RecentBookingItem(
+                id=100000 + p.id,
+                booking_reference=f"#MATCH-{p.match_id:03d}-{p.id:03d}",
+                customer_name=cust_name,
+                customer_initials=get_initials(cust_name),
+                customer_phone=p.user.phone if p.user else None,
+                customer_email=p.user.email if p.user else None,
+                booking_type="Open Match",
+                turf_name=turf_name,
+                ground_name=f"{match.title} ({p.team_slot})",
+                time_display=f"{match.match_date}, {match.start_time} - {match.end_time}",
+                status="CONFIRMED",
+                amount=match.price_per_player
+            )
+        })
+
+    # Sort combined bookings chronologically descending
+    items.sort(key=lambda x: x["timestamp"], reverse=True)
+    return [item["data"] for item in items[:20]]
 
 @router.get("/facility-status", response_model=List[FacilityStatusItem])
 def get_facility_status(

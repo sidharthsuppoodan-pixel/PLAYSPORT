@@ -64,6 +64,7 @@ def list_open_matches(
                 continue
 
         turf = db.query(Turf).filter(Turf.id == m.turf_id).first()
+        creator = db.query(User).filter(User.id == m.creator_id).first()
         part_outs = []
         for p in participants:
             u = db.query(User).filter(User.id == p.user_id).first()
@@ -73,6 +74,8 @@ def list_open_matches(
                     user_id=u.id,
                     full_name=u.full_name,
                     username=u.username,
+                    phone=u.phone,
+                    email=u.email,
                     team_slot=p.team_slot,
                     joined_at=p.joined_at
                 ))
@@ -100,6 +103,8 @@ def list_open_matches(
             slots_left=slots_left,
             created_at=m.created_at,
             creator_id=m.creator_id,
+            creator_name=creator.full_name if creator else "Host",
+            creator_phone=creator.phone if creator else None,
             participants=part_outs
         ))
     return results
@@ -269,6 +274,8 @@ def create_open_match(
         slots_left=new_match.max_players,
         created_at=new_match.created_at,
         creator_id=new_match.creator_id,
+        creator_name=current_user.full_name,
+        creator_phone=current_user.phone,
         participants=[]
     )
 

@@ -18,12 +18,14 @@ const TournamentsPage = ({ onOpenAuth }) => {
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [registeringTourn, setRegisteringTourn] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [teamForm, setTeamForm] = useState({
     team_name: '',
     captain_name: '',
     contact_phone: '',
     members_count: 7,
   });
+  const [formErrors, setFormErrors] = useState({});
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -42,30 +44,102 @@ const TournamentsPage = ({ onOpenAuth }) => {
     fetchTournaments();
   }, []);
 
+  const validatePhone = (phone) => {
+    if (!phone) return "Phone number is required.";
+    const clean = phone.trim().replace(/\D/g, '');
+    if (clean.length !== 10) {
+      return "Phone number must be exactly 10 digits.";
+    }
+    if (!/^[6-9]/.test(clean)) {
+      return "10-digit mobile number must start with 6, 7, 8, or 9.";
+    }
+    if (/^(\d)\1{6}/.test(clean)) {
+      return "The first 7 digits cannot be the same number.";
+    }
+    return "";
+  };
+
+  const validateCaptain = (name) => {
+    if (!name || !name.trim()) return "Captain's name is required.";
+    const trimmed = name.trim();
+    if (trimmed.length < 2) return "Captain's name must be at least 2 characters.";
+    if (trimmed.length > 100) return "Captain's name cannot exceed 100 characters.";
+    if (!/^[A-Za-z\s.'-]+$/.test(trimmed)) {
+      return "Captain's name should only contain letters and standard characters.";
+    }
+    return "";
+  };
+
+  const validateTeamName = (name) => {
+    if (!name || !name.trim()) return "Team name is required.";
+    const trimmed = name.trim();
+    if (trimmed.length < 2) return "Team name must be at least 2 characters.";
+    if (trimmed.length > 100) return "Team name cannot exceed 100 characters.";
+    if (/^[\d\W]+$/.test(trimmed)) {
+      return "Team name cannot consist solely of numbers or symbols.";
+    }
+    return "";
+  };
+
   const handleRegisterTeamSubmit = async (e) => {
     e.preventDefault();
     if (!isAuthenticated) {
       onOpenAuth('login');
       return;
     }
-    
-    // Add custom frontend validation
-    if (!/^[0-9]{10,15}$/.test(teamForm.contact_phone)) {
-      setErrorMsg("Please enter a valid 10 to 15 digit phone number.");
-      setTimeout(() => setErrorMsg(''), 4000);
+
+    const phoneErr = validatePhone(teamForm.contact_phone);
+    const captainErr = validateCaptain(teamForm.captain_name);
+    const teamErr = validateTeamName(teamForm.team_name);
+    let membersErr = "";
+    if (!teamForm.members_count || teamForm.members_count < 5 || teamForm.members_count > 25) {
+      membersErr = "Squad size must be between 5 and 25 players.";
+    }
+
+    const errors = {};
+    if (phoneErr) errors.contact_phone = phoneErr;
+    if (captainErr) errors.captain_name = captainErr;
+    if (teamErr) errors.team_name = teamErr;
+    if (membersErr) errors.members_count = membersErr;
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      setErrorMsg(phoneErr || captainErr || teamErr || membersErr);
+      setTimeout(() => setErrorMsg(''), 5000);
       return;
     }
 
+    setSubmitting(true);
+    setFormErrors({});
+    setErrorMsg('');
+
     try {
-      const res = await tournamentsAPI.registerTeam(registeringTourn.id, teamForm);
-      setSuccessMsg(res.data.message);
+      const payload = {
+        team_name: teamForm.team_name.trim(),
+        captain_name: teamForm.captain_name.trim(),
+        contact_phone: teamForm.contact_phone.trim().replace(/[\s\-()]/g, ''),
+        members_count: Number(teamForm.members_count) || 7,
+      };
+      const res = await tournamentsAPI.registerTeam(registeringTourn.id, payload);
+      setSuccessMsg(res.data.message || "Team registered successfully!");
       setRegisteringTourn(null);
       fetchTournaments();
-      setTimeout(() => setSuccessMsg(''), 4000);
+      setTimeout(() => setSuccessMsg(''), 5000);
     } catch (err) {
       console.error("Tournament registration error", err);
-      setErrorMsg(err.response?.data?.detail || "Registration failed.");
-      setTimeout(() => setErrorMsg(''), 4000);
+      let detailMsg = "Registration failed.";
+      if (err.response?.data?.detail) {
+        const d = err.response.data.detail;
+        if (typeof d === 'string') {
+          detailMsg = d;
+        } else if (Array.isArray(d)) {
+          detailMsg = d.map(item => item.msg?.replace(/^Value error,\s*/i, '') || item.msg).join('. ');
+        }
+      }
+      setErrorMsg(detailMsg);
+      setTimeout(() => setErrorMsg(''), 5000);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -162,17 +236,29 @@ const TournamentsPage = ({ onOpenAuth }) => {
 
               <div className="p-5 pt-0">
                 <button
+                  disabled={t.current_teams >= t.max_teams}
                   onClick={() => {
                     if (!isAuthenticated) {
                       onOpenAuth('login');
                     } else {
-                      setTeamForm(prev => ({ ...prev, captain_name: user?.full_name || '' }));
+                      setTeamForm({
+                        team_name: '',
+                        captain_name: '',
+                        contact_phone: '',
+                        members_count: 7,
+                      });
+                      setFormErrors({});
+                      setErrorMsg('');
                       setRegisteringTourn(t);
                     }
                   }}
-                  className="w-full py-2.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                  className={`w-full py-2.5 text-xs font-bold rounded-xl shadow-sm transition ${
+                    t.current_teams >= t.max_teams
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                      : 'bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white'
+                  }`}
                 >
-                  Register Team (₹{t.entry_fee})
+                  {t.current_teams >= t.max_teams ? 'Registration Closed (Full)' : `Register Team (₹${t.entry_fee})`}
                 </button>
               </div>
             </div>
@@ -185,65 +271,153 @@ const TournamentsPage = ({ onOpenAuth }) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-md relative fade-in">
             <button
-              onClick={() => setRegisteringTourn(null)}
+              onClick={() => {
+                setRegisteringTourn(null);
+                setFormErrors({});
+                setErrorMsg('');
+              }}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
             >
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="text-base font-bold text-slate-900 mb-1">Register Team for {registeringTourn.title}</h3>
-            <p className="text-xs text-slate-500 mb-4">Register your squad to compete.</p>
+            <p className="text-xs text-slate-500 mb-4">Complete team details to secure tournament entry.</p>
 
-            <form onSubmit={handleRegisterTeamSubmit} className="space-y-3 text-xs">
+            {errorMsg && (
+              <div className="mb-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleRegisterTeamSubmit} className="space-y-3.5 text-xs">
+              {/* Team Name */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Team Name <span className="text-rose-500">*</span></label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Team Name <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Cochin Strikers FC"
                   value={teamForm.team_name}
-                  onChange={(e) => setTeamForm({ ...teamForm, team_name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTeamForm({ ...teamForm, team_name: val });
+                    const err = validateTeamName(val);
+                    setFormErrors(prev => ({ ...prev, team_name: err }));
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg transition ${
+                    formErrors.team_name ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 focus:border-brand-500'
+                  }`}
                 />
+                {formErrors.team_name ? (
+                  <span className="text-[11px] text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.team_name}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Official club or squad name</span>
+                )}
               </div>
 
+              {/* Captain Name */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Captain's Name <span className="text-rose-500">*</span></label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Captain's Name <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="Full Name"
+                  placeholder="Enter Captain's Full Name (e.g. Alex Johnson)"
                   value={teamForm.captain_name}
-                  onChange={(e) => setTeamForm({ ...teamForm, captain_name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTeamForm({ ...teamForm, captain_name: val });
+                    const err = validateCaptain(val);
+                    setFormErrors(prev => ({ ...prev, captain_name: err }));
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg transition ${
+                    formErrors.captain_name ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 focus:border-brand-500'
+                  }`}
                 />
+                {formErrors.captain_name ? (
+                  <span className="text-[11px] text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.captain_name}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Full name of the team captain</span>
+                )}
               </div>
 
+              {/* Captain Phone Number */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Captain Phone Number <span className="text-rose-500">*</span></label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Captain Phone Number <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="tel"
                   required
-                  pattern="^[0-9]{10,15}$"
-                  title="Please enter a valid 10 to 15 digit phone number"
-                  placeholder="10-digit mobile number"
+                  maxLength={10}
+                  placeholder="10-digit mobile number (e.g. 9847123456)"
                   value={teamForm.contact_phone}
-                  onChange={(e) => setTeamForm({ ...teamForm, contact_phone: e.target.value.replace(/\D/g, '') })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  onChange={(e) => {
+                    // Only allow digits and cap at exactly 10 characters
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setTeamForm({ ...teamForm, contact_phone: val });
+                    const err = validatePhone(val);
+                    setFormErrors(prev => ({ ...prev, contact_phone: err }));
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg transition ${
+                    formErrors.contact_phone ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 focus:border-brand-500'
+                  }`}
                 />
+                {formErrors.contact_phone ? (
+                  <span className="text-[11px] text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.contact_phone}
+                  </span>
+                ) : teamForm.contact_phone && teamForm.contact_phone.length === 10 && !validatePhone(teamForm.contact_phone) ? (
+                  <span className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 shrink-0" /> Looks good! Valid 10-digit mobile number
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Must be exactly 10 digits starting with 6, 7, 8, or 9 ({teamForm.contact_phone.length}/10)
+                  </span>
+                )}
               </div>
 
+              {/* Number of Squad Members */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Number of Squad Members</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Squad Size (5 to 25 players) <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="number"
                   min="5"
-                  max="15"
+                  max="25"
                   required
                   value={teamForm.members_count}
-                  onChange={(e) => setTeamForm({ ...teamForm, members_count: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  onChange={(e) => {
+                    const count = Number(e.target.value);
+                    setTeamForm({ ...teamForm, members_count: count });
+                    if (count < 5 || count > 25) {
+                      setFormErrors(prev => ({ ...prev, members_count: "Squad size must be between 5 and 25 players." }));
+                    } else {
+                      setFormErrors(prev => ({ ...prev, members_count: "" }));
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg transition ${
+                    formErrors.members_count ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 focus:border-brand-500'
+                  }`}
                 />
+                {formErrors.members_count ? (
+                  <span className="text-[11px] text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.members_count}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Standard format squad size</span>
+                )}
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-600 text-xs">
@@ -253,9 +427,10 @@ const TournamentsPage = ({ onOpenAuth }) => {
 
               <button
                 type="submit"
-                className="w-full mt-3 py-2.5 bg-brand-700 text-white font-bold rounded-lg hover:bg-brand-800"
+                disabled={submitting}
+                className="w-full mt-3 py-2.5 bg-brand-700 text-white font-bold rounded-lg hover:bg-brand-800 disabled:opacity-50 transition flex items-center justify-center gap-2"
               >
-                Confirm Team Registration
+                {submitting ? 'Registering Squad...' : 'Confirm Team Registration'}
               </button>
             </form>
           </div>

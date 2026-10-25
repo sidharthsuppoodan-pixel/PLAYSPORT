@@ -30,6 +30,27 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
+export const KERALA_DISTRICTS = [
+  "Ernakulam",
+  "Kochi",
+  "Thiruvananthapuram",
+  "Kollam",
+  "Thrissur",
+  "Kozhikode",
+  "Kottayam",
+  "Palakkad",
+  "Malappuram",
+  "Kannur",
+  "Alappuzha",
+  "Pathanamthitta",
+  "Idukki",
+  "Wayanad",
+  "Kasaragod",
+  "Bangalore",
+  "Mumbai",
+  "New Delhi"
+];
+
 export const isSupportedImage = (urlOrFileName) => {
   if (!urlOrFileName || typeof urlOrFileName !== 'string') return false;
   const lower = urlOrFileName.trim().toLowerCase();
@@ -88,6 +109,7 @@ const OwnerDashboardPage = () => {
     active_matches: 0,
   });
   const [recentBookings, setRecentBookings] = useState([]);
+  const [bookingFilter, setBookingFilter] = useState('ALL');
   const [facilityStatuses, setFacilityStatuses] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -239,6 +261,30 @@ const OwnerDashboardPage = () => {
 
     if (matched.length > 0) return matched;
     return ['Football', 'Cricket'];
+  };
+
+  const openEditModal = (turf) => {
+    if (!turf) return;
+    setEditingTurf({
+      id: turf.id,
+      name: turf.name || '',
+      city: turf.city || 'Kochi',
+      address: turf.address || '',
+      pincode: turf.pincode || '',
+      contact_phone: turf.contact_phone || '',
+      contact_email: turf.contact_email || '',
+      starting_price: turf.starting_price || 1200,
+      dimension_text: turf.dimension_text || '6000 sq ft',
+      sports_supported: turf.sports_supported || 'Football (5v5), Box Cricket',
+      facilities: turf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
+      image_url: turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
+      description: turf.description || '',
+      opening_time: turf.opening_time || '06:00 AM',
+      closing_time: turf.closing_time || '11:00 PM'
+    });
+    setModalError('');
+    setModalSuccess('');
+    setShowEditTurfModal(true);
   };
 
   // Form submit handlers
@@ -400,6 +446,11 @@ const OwnerDashboardPage = () => {
     e.preventDefault();
     setModalError('');
     try {
+      const targetTurfId = editingTurf.id || myTurfs[0]?.id;
+      if (!targetTurfId) {
+        setModalError("No turf selected to update.");
+        return;
+      }
       if (editingTurf.image_url && editingTurf.image_url.trim()) {
         if (!isSupportedImage(editingTurf.image_url.trim())) {
           setModalError("Invalid image type! PDF, PPT, and DOC files are not supported. Only JPG, PNG, and WEBP image files are allowed.");
@@ -422,7 +473,7 @@ const OwnerDashboardPage = () => {
         facilities: editingTurf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
         images: editingTurf.image_url ? [editingTurf.image_url] : ["https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80"]
       };
-      await turfsAPI.update(editingTurf.id, payload);
+      await turfsAPI.update(targetTurfId, payload);
       setModalSuccess("Turf profile details updated successfully!");
       fetchDashboard();
       setTimeout(() => {
@@ -609,6 +660,14 @@ const OwnerDashboardPage = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {myTurfs.length > 0 && (
+              <button
+                onClick={() => openEditModal(myTurfs[0])}
+                className="py-2 px-3 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5"
+              >
+                ✏️ Edit Turf Profile
+              </button>
+            )}
             <button
               onClick={() => setShowManageSlotsModal(true)}
               className="py-2 px-3 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5"
@@ -693,21 +752,33 @@ const OwnerDashboardPage = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {recentBookings.map((bk) => (
+                      {recentBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'Confirmed').slice(0, 6).map((bk) => (
                         <tr key={bk.id} className="hover:bg-slate-50/80">
                           <td className="py-3 font-mono font-bold text-brand-700">{bk.booking_reference}</td>
-                          <td className="py-3 font-semibold text-slate-800">{bk.customer_name}</td>
-                          <td className="py-3 text-slate-600">{bk.ground_name || bk.turf_name}</td>
+                          <td className="py-3">
+                            <span className="font-semibold text-slate-800 block">{bk.customer_name}</span>
+                            {bk.customer_phone && (
+                              <span className="text-[10px] text-slate-400 font-medium">📞 {bk.customer_phone}</span>
+                            )}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            <span>{bk.ground_name || bk.turf_name}</span>
+                            {bk.booking_type === 'Open Match' && (
+                              <span className="ml-1 text-[9px] bg-amber-50 text-amber-700 font-bold px-1.5 py-0.5 rounded border border-amber-200">
+                                Match
+                              </span>
+                            )}
+                          </td>
                           <td className="py-3 text-slate-500">{bk.time_display}</td>
                           <td className="py-3 text-right">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              {bk.status}
+                              CONFIRMED
                             </span>
                           </td>
                         </tr>
                       ))}
-                      {recentBookings.length === 0 && (
-                        <tr><td colSpan="5" className="py-6 text-center text-slate-400">No bookings yet.</td></tr>
+                      {recentBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'Confirmed').length === 0 && (
+                        <tr><td colSpan="5" className="py-6 text-center text-slate-400">No confirmed bookings recorded yet.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -753,27 +824,7 @@ const OwnerDashboardPage = () => {
               </button>
               {myTurfs.length > 0 && (
                 <button
-                  onClick={() => {
-                    const turf = myTurfs[0];
-                    setEditingTurf({
-                      id: turf.id,
-                      name: turf.name,
-                      city: turf.city || 'Kochi',
-                      address: turf.address || '',
-                      pincode: turf.pincode || '',
-                      contact_phone: turf.contact_phone || '',
-                      contact_email: turf.contact_email || '',
-                      starting_price: turf.starting_price || 1200,
-                      dimension_text: turf.dimension_text || '6000 sq ft',
-                      sports_supported: turf.sports_supported || 'Football (5v5), Box Cricket',
-                      facilities: turf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
-                      image_url: turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
-                      description: turf.description || '',
-                      opening_time: turf.opening_time || '06:00 AM',
-                      closing_time: turf.closing_time || '11:00 PM'
-                    });
-                    setShowEditTurfModal(true);
-                  }}
+                  onClick={() => openEditModal(myTurfs[0])}
                   className="py-2.5 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-700/20 transition flex items-center gap-2"
                 >
                   ✏️ Edit Turf Profile
@@ -795,26 +846,7 @@ const OwnerDashboardPage = () => {
                     <p className="text-xs text-slate-500 flex items-center gap-1">📍 {turf.address || turf.city}</p>
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs gap-2">
                       <button
-                        onClick={() => {
-                          setEditingTurf({
-                            id: turf.id,
-                            name: turf.name,
-                            city: turf.city || 'Kochi',
-                            address: turf.address || '',
-                            pincode: turf.pincode || '',
-                            contact_phone: turf.contact_phone || '',
-                            contact_email: turf.contact_email || '',
-                            starting_price: turf.starting_price || 1200,
-                            dimension_text: turf.dimension_text || '6000 sq ft',
-                            sports_supported: turf.sports_supported || 'Football (5v5), Box Cricket',
-                            facilities: turf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
-                            image_url: turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
-                            description: turf.description || '',
-                            opening_time: turf.opening_time || '06:00 AM',
-                            closing_time: turf.closing_time || '11:00 PM'
-                          });
-                          setShowEditTurfModal(true);
-                        }}
+                        onClick={() => openEditModal(turf)}
                         className="py-1 px-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-[11px] font-bold rounded-lg transition flex items-center gap-1 border border-brand-200"
                       >
                         ✏️ Edit Turf Profile
@@ -858,47 +890,122 @@ const OwnerDashboardPage = () => {
         )}
 
         {/* ─── TAB 4: BOOKINGS ─────────────────────────────────────────────────── */}
-        {activeTab === 'bookings' && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="p-5 border-b border-slate-200">
-              <h2 className="text-lg font-bold text-slate-900">Customer Bookings</h2>
-              <p className="text-xs text-slate-500">All bookings reserved across your turfs.</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs whitespace-nowrap">
-                <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
-                  <tr>
-                    <th className="px-6 py-4">Reference</th>
-                    <th className="px-6 py-4">Customer</th>
-                    <th className="px-6 py-4">Facility</th>
-                    <th className="px-6 py-4">Time</th>
-                    <th className="px-6 py-4">Amount</th>
-                    <th className="px-6 py-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {recentBookings.map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-50/50">
-                      <td className="px-6 py-4 font-mono font-bold text-brand-700">{b.booking_reference}</td>
-                      <td className="px-6 py-4 font-semibold text-slate-900">{b.customer_name}</td>
-                      <td className="px-6 py-4 text-slate-700">{b.ground_name || b.turf_name}</td>
-                      <td className="px-6 py-4 text-slate-600">{b.time_display}</td>
-                      <td className="px-6 py-4 font-bold text-emerald-600">₹{b.amount}</td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800">
-                          {b.status}
-                        </span>
-                      </td>
+        {activeTab === 'bookings' && (() => {
+          const confirmedBookingsOnly = recentBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'Confirmed');
+          const displayedBookings = confirmedBookingsOnly.filter(b => {
+            if (bookingFilter === 'SLOT') return b.booking_type === 'Turf Slot';
+            if (bookingFilter === 'OPEN_MATCH') return b.booking_type === 'Open Match';
+            return true;
+          });
+          const slotCount = confirmedBookingsOnly.filter(b => b.booking_type === 'Turf Slot').length;
+          const matchCount = confirmedBookingsOnly.filter(b => b.booking_type === 'Open Match').length;
+
+          return (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+              <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    Customer Bookings
+                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Confirmed Only
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-500">All verified reservations across your turfs and open matches.</p>
+                </div>
+                <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                  <button
+                    onClick={() => setBookingFilter('ALL')}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      bookingFilter === 'ALL'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    All Confirmed ({confirmedBookingsOnly.length})
+                  </button>
+                  <button
+                    onClick={() => setBookingFilter('SLOT')}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      bookingFilter === 'SLOT'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Turf Slots ({slotCount})
+                  </button>
+                  <button
+                    onClick={() => setBookingFilter('OPEN_MATCH')}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      bookingFilter === 'OPEN_MATCH'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Open Matches ({matchCount})
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
+                    <tr>
+                      <th className="px-6 py-4">Reference</th>
+                      <th className="px-6 py-4">Customer Name</th>
+                      <th className="px-6 py-4">Booking Type</th>
+                      <th className="px-6 py-4">Facility / Match</th>
+                      <th className="px-6 py-4">Time</th>
+                      <th className="px-6 py-4">Amount</th>
+                      <th className="px-6 py-4">Status</th>
                     </tr>
-                  ))}
-                  {recentBookings.length === 0 && (
-                    <tr><td colSpan="6" className="px-6 py-8 text-center text-slate-400">No customer bookings recorded yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {displayedBookings.map((b) => (
+                      <tr key={b.id} className="hover:bg-slate-50/50">
+                        <td className="px-6 py-4 font-mono font-bold text-brand-700">{b.booking_reference}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-800 font-bold text-xs flex items-center justify-center border border-emerald-200 shrink-0">
+                              {b.customer_initials || b.customer_name?.charAt(0) || 'P'}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-900 block text-xs">{b.customer_name}</span>
+                              {b.customer_phone && (
+                                <span className="text-[10px] text-slate-500 font-medium">📞 {b.customer_phone}</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {b.booking_type === 'Open Match' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 inline-flex items-center gap-1">
+                              🏆 Open Match
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
+                              ⚽ Turf Slot
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-slate-700 font-medium">{b.ground_name || b.turf_name}</td>
+                        <td className="px-6 py-4 text-slate-600">{b.time_display}</td>
+                        <td className="px-6 py-4 font-bold text-emerald-600">₹{b.amount}</td>
+                        <td className="px-6 py-4">
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            CONFIRMED
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {displayedBookings.length === 0 && (
+                      <tr><td colSpan="7" className="px-6 py-8 text-center text-slate-400">No confirmed customer bookings found for this filter.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ─── TAB 5: OPEN MATCHES ─────────────────────────────────────────────── */}
         {activeTab === 'matches' && (
@@ -948,9 +1055,9 @@ const OwnerDashboardPage = () => {
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-bold text-slate-700 flex items-center gap-1.5">
                             <Users className="w-4 h-4 text-brand-600" />
-                            Registered Players ({m.participants?.length || 0} / {m.max_players}):
+                            Players Who Booked This Match ({m.participants?.length || 0} / {m.max_players}):
                           </span>
-                          <span className="font-extrabold text-emerald-600">₹{m.price_per_player}/player</span>
+                          <span className="font-extrabold text-emerald-600">₹{m.price_per_player}/player (Paid)</span>
                         </div>
 
                         {m.participants && m.participants.length > 0 ? (
@@ -958,27 +1065,36 @@ const OwnerDashboardPage = () => {
                             {m.participants.map((p, idx) => (
                               <div
                                 key={p.id || idx}
-                                className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs"
+                                className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs shadow-2xs"
                               >
-                                <div className="w-7 h-7 rounded-full bg-brand-700 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                                <div className="w-8 h-8 rounded-full bg-brand-700 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
                                   {p.full_name?.charAt(0) || 'P'}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-bold text-slate-900 truncate text-xs flex items-center gap-1">
-                                    <span className="truncate">{p.full_name}</span>
-                                    {p.user_id === m.creator_id && (
-                                      <span className="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold shrink-0">Host</span>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <p className="font-bold text-slate-900 truncate text-xs">
+                                      {p.full_name}
+                                    </p>
+                                    {p.user_id === m.creator_id ? (
+                                      <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold shrink-0">
+                                        Host
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold shrink-0">
+                                        Booked
+                                      </span>
                                     )}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400">
-                                    Slot: <span className="text-slate-600 font-semibold">{p.team_slot || 'Team A'}</span>
-                                  </p>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500 mt-0.5">
+                                    <span>Slot: <strong className="text-slate-700">{p.team_slot || 'Team A'}</strong></span>
+                                    {p.phone && <span>• 📞 <strong className="text-slate-700">{p.phone}</strong></span>}
+                                  </div>
                                 </div>
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-400 italic py-1 text-center bg-slate-50 rounded-lg">No players registered yet.</p>
+                          <p className="text-xs text-slate-400 italic py-2 text-center bg-slate-50 rounded-lg">No players have booked spots in this open match yet.</p>
                         )}
                       </div>
                     </div>
@@ -1710,6 +1826,9 @@ const OwnerDashboardPage = () => {
                     onChange={(e) => setEditingTurf({ ...editingTurf, city: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
                   >
+                    {editingTurf.city && !KERALA_DISTRICTS.includes(editingTurf.city) && (
+                      <option value={editingTurf.city}>{editingTurf.city}</option>
+                    )}
                     {KERALA_DISTRICTS.map(dist => (
                       <option key={dist} value={dist}>{dist}</option>
                     ))}
@@ -1827,7 +1946,10 @@ const OwnerDashboardPage = () => {
                     { label: '🏀 Basketball', val: 'Basketball' },
                     { label: '🏓 Table Tennis', val: 'Table Tennis' }
                   ].map((sport) => {
-                    const isSelected = (editingTurf.sports_supported || '').includes(sport.val);
+                    const sportsLower = (editingTurf.sports_supported || '').toLowerCase();
+                    const isSelected = sportsLower.includes(sport.val.toLowerCase()) ||
+                      (sport.val === 'Football (5v5)' && (sportsLower.includes('5v5 football') || sportsLower.includes('football (5v5)') || sportsLower === 'football')) ||
+                      (sport.val === 'Box Cricket' && (sportsLower.includes('box cricket') || sportsLower.includes('cricket')));
                     return (
                       <button
                         key={sport.val}
@@ -1940,8 +2062,7 @@ const OwnerDashboardPage = () => {
 
                 <input
                   type="text"
-                  required
-                  value={editingTurf.image_url}
+                  value={editingTurf.image_url?.startsWith('data:image/') ? '' : (editingTurf.image_url || '')}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val && !isSupportedImage(val)) {
@@ -1951,7 +2072,7 @@ const OwnerDashboardPage = () => {
                     }
                     setEditingTurf({ ...editingTurf, image_url: val });
                   }}
-                  placeholder="Or paste HD image URL (https://...)"
+                  placeholder={editingTurf.image_url?.startsWith('data:image/') ? "Local image loaded (click upload above to change or paste URL here)" : "Or paste HD image URL (https://...)"}
                   className="w-full px-3 py-2 border rounded-lg font-mono text-[11px]"
                 />
 

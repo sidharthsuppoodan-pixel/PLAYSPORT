@@ -117,6 +117,24 @@ const BookingModal = ({ booking, isOpen, onClose }) => {
               </div>
             </div>
 
+            {booking.equipment_rentals && booking.equipment_rentals.length > 0 && (
+              <div className="py-2.5 border-b border-slate-200 text-xs">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1.5">
+                  Rented Turf Equipment
+                </span>
+                <div className="space-y-1">
+                  {booking.equipment_rentals.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-slate-700">
+                      <span className="font-medium text-slate-800">
+                        {item.quantity}x {item.name}
+                      </span>
+                      <span className="font-bold text-slate-900">+₹{item.total_price}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-3 text-xs">
               <span className="text-slate-600">Payment Status</span>
               <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">

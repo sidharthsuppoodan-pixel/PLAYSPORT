@@ -1,6 +1,7 @@
+import re
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.models.tournament import TournamentStatusEnum
 
 class TournamentTeamOut(BaseModel):
@@ -48,5 +49,38 @@ class TournamentOut(TournamentBase):
 class TeamRegisterRequest(BaseModel):
     team_name: str = Field(..., min_length=2, max_length=100)
     captain_name: str = Field(..., min_length=2, max_length=100)
-    contact_phone: str = Field(..., pattern=r"^\+?[0-9]{10,15}$")
-    members_count: int = Field(default=7, ge=1, le=25)
+    contact_phone: str = Field(..., min_length=10, max_length=10)
+    members_count: int = Field(default=7, ge=5, le=25)
+
+    @field_validator("team_name")
+    @classmethod
+    def validate_team_name(cls, v: str) -> str:
+        val = v.strip()
+        if len(val) < 2:
+            raise ValueError("Team name must contain at least 2 characters.")
+        if re.match(r"^[\d\W]+$", val):
+            raise ValueError("Team name cannot consist solely of numbers or symbols.")
+        return val
+
+    @field_validator("captain_name")
+    @classmethod
+    def validate_captain_name(cls, v: str) -> str:
+        val = v.strip()
+        if len(val) < 2:
+            raise ValueError("Captain name must contain at least 2 characters.")
+        if not re.match(r"^[A-Za-z\s.'-]+$", val):
+            raise ValueError("Captain name should only contain letters and standard name characters.")
+        return val
+
+    @field_validator("contact_phone")
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        clean = re.sub(r"\D", "", v.strip())
+        if len(clean) != 10:
+            raise ValueError("Phone number must be exactly 10 digits.")
+        if clean[0] not in "6789":
+            raise ValueError("10-digit mobile number must begin with 6, 7, 8, or 9.")
+        if len(set(clean[:7])) == 1:
+            raise ValueError("The first 7 digits cannot be the same number.")
+        return clean
+

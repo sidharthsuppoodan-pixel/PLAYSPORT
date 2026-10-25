@@ -48,10 +48,13 @@ class RecentBookingItem(BaseModel):
     booking_reference: str # "#BK-9042"
     customer_name: str
     customer_initials: str
+    customer_phone: Optional[str] = None
+    customer_email: Optional[str] = None
+    booking_type: Optional[str] = "Turf Slot"
     turf_name: str
     ground_name: str
     time_display: str # "Today, 18:00 - 19:00"
-    status: str # "Confirmed", "Pending"
+    status: str # "CONFIRMED"
     amount: float
 
 class AdminFacilityOut(BaseModel):
