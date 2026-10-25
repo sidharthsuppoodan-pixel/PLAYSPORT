@@ -109,17 +109,18 @@ def root():
 
 @app.get("/api/health")
 def health_check():
-    from app.core.database import engine, db_url
+    from app.core.database import engine, db_url, db_connection_error
     from sqlalchemy import text
     try:
         with engine.connect() as conn:
             user_count = conn.execute(text("SELECT count(*) FROM users")).scalar()
             turf_count = conn.execute(text("SELECT count(*) FROM turfs")).scalar()
             return {
-                "status": "healthy",
+                "status": "healthy" if not db_connection_error else "fallback_sqlite",
                 "service": "playsport-backend",
                 "database_engine": engine.name,
                 "database_target": db_url.split("@")[-1] if "@" in db_url else db_url,
+                "db_connection_error": db_connection_error,
                 "users_in_db": user_count,
                 "turfs_in_db": turf_count
             }
@@ -129,5 +130,6 @@ def health_check():
             "service": "playsport-backend",
             "database_engine": engine.name,
             "database_target": db_url.split("@")[-1] if "@" in db_url else db_url,
+            "db_connection_error": db_connection_error or str(e),
             "error": str(e)
         }

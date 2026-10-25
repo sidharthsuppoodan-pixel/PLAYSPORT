@@ -6,7 +6,8 @@ from app.core.config import settings
 
 logger = logging.getLogger("uvicorn.error")
 
-db_url = os.getenv("DATABASE_URL") or settings.DATABASE_URL
+raw_url = os.getenv("DATABASE_URL") or settings.DATABASE_URL
+db_url = raw_url.strip() if raw_url else ""
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
@@ -17,6 +18,8 @@ if "-pooler." in db_url:
 
 if "channel_binding=" in db_url:
     db_url = db_url.replace("&channel_binding=require", "").replace("channel_binding=require&", "").replace("channel_binding=require", "")
+
+db_connection_error = None
 
 try:
     engine = create_engine(
@@ -29,6 +32,7 @@ try:
         conn.execute(text("SELECT 1"))
     logger.info(f"Connected to primary database: {db_url.split('@')[-1] if '@' in db_url else db_url}")
 except Exception as e:
+    db_connection_error = str(e)
     logger.warning(f"Failed to connect to primary database ({db_url}): {e}. Falling back to SQLite database...")
     sqlite_url = "sqlite:///./playsport.db"
     engine = create_engine(
