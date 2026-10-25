@@ -9,7 +9,9 @@ logger = logging.getLogger("uvicorn.error")
 raw_url = os.getenv("DATABASE_URL") or settings.DATABASE_URL
 db_url = raw_url.strip() if raw_url else ""
 if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+    db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 # Neon PostgreSQL connection optimization:
 # Strip '-pooler.' to ensure direct connection to PostgreSQL tables without PgBouncer schema isolation
