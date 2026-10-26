@@ -144,12 +144,19 @@ const OwnerDashboardPage = () => {
   const [editingTurf, setEditingTurf] = useState({
     id: '',
     name: '',
-    city: 'Ernakulam',
+    city: 'Kochi',
     address: '',
+    pincode: '',
+    contact_phone: '',
+    contact_email: '',
     starting_price: 1200,
+    dimension_text: '6000 sq ft',
     sports_supported: 'Football (5v5), Box Cricket',
-    image_url: '',
-    description: ''
+    facilities: ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
+    image_url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
+    description: '',
+    opening_time: '06:00 AM',
+    closing_time: '11:00 PM'
   });
 
   const [slotGenData, setSlotGenData] = useState({
@@ -263,28 +270,77 @@ const OwnerDashboardPage = () => {
     return ['Football', 'Cricket'];
   };
 
-  const openEditModal = (turf) => {
-    if (!turf) return;
-    setEditingTurf({
-      id: turf.id,
-      name: turf.name || '',
-      city: turf.city || 'Kochi',
-      address: turf.address || '',
-      pincode: turf.pincode || '',
-      contact_phone: turf.contact_phone || '',
-      contact_email: turf.contact_email || '',
-      starting_price: turf.starting_price || 1200,
-      dimension_text: turf.dimension_text || '6000 sq ft',
-      sports_supported: turf.sports_supported || 'Football (5v5), Box Cricket',
-      facilities: turf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
-      image_url: turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
-      description: turf.description || '',
-      opening_time: turf.opening_time || '06:00 AM',
-      closing_time: turf.closing_time || '11:00 PM'
-    });
-    setModalError('');
-    setModalSuccess('');
-    setShowEditTurfModal(true);
+  const openEditModal = (turfToEdit) => {
+    try {
+      const turf = turfToEdit || (myTurfs && myTurfs.length > 0 ? myTurfs[0] : null) || {};
+
+      // 1. Safely normalize sports_supported to a clean comma-separated string
+      let normalizedSports = 'Football (5v5), Box Cricket';
+      if (Array.isArray(turf.sports_supported)) {
+        normalizedSports = turf.sports_supported.join(', ');
+      } else if (typeof turf.sports_supported === 'string' && turf.sports_supported.trim()) {
+        normalizedSports = turf.sports_supported.trim();
+      }
+
+      // 2. Safely normalize facilities to a clean JavaScript Array
+      let normalizedFacilities = ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"];
+      if (Array.isArray(turf.facilities)) {
+        normalizedFacilities = turf.facilities;
+      } else if (typeof turf.facilities === 'string' && turf.facilities.trim()) {
+        try {
+          const parsed = JSON.parse(turf.facilities);
+          normalizedFacilities = Array.isArray(parsed) ? parsed : turf.facilities.split(',').map(s => s.trim()).filter(Boolean);
+        } catch {
+          normalizedFacilities = turf.facilities.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+
+      // 3. Safely normalize image_url to a valid string
+      let normalizedImage = 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80';
+      if (Array.isArray(turf.images) && turf.images.length > 0 && typeof turf.images[0] === 'string') {
+        normalizedImage = turf.images[0];
+      } else if (typeof turf.images === 'string' && turf.images.trim()) {
+        if (turf.images.trim().startsWith('[')) {
+          try {
+            const parsed = JSON.parse(turf.images);
+            if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+              normalizedImage = parsed[0];
+            }
+          } catch {
+            normalizedImage = turf.images.trim();
+          }
+        } else {
+          normalizedImage = turf.images.trim();
+        }
+      } else if (typeof turf.image_url === 'string' && turf.image_url.trim()) {
+        normalizedImage = turf.image_url.trim();
+      }
+
+      setEditingTurf({
+        id: turf.id || '',
+        name: turf.name || user?.business_name || (user?.full_name ? `${user.full_name}'s Sports Arena` : 'My Turf'),
+        city: turf.city || user?.city || 'Kochi',
+        address: turf.address || (user?.city ? `${user.city}, Kerala` : 'Near Stadium Road, Kochi'),
+        pincode: turf.pincode || '',
+        contact_phone: turf.contact_phone || user?.phone || '',
+        contact_email: turf.contact_email || user?.email || '',
+        starting_price: Number(turf.starting_price) || 1200,
+        dimension_text: turf.dimension_text || '6000 sq ft',
+        sports_supported: normalizedSports,
+        facilities: normalizedFacilities,
+        image_url: normalizedImage,
+        description: turf.description || '',
+        opening_time: turf.opening_time || '06:00 AM',
+        closing_time: turf.closing_time || '11:00 PM'
+      });
+      setModalError('');
+      setModalSuccess('');
+      setShowEditTurfModal(true);
+    } catch (err) {
+      console.error("Error opening edit turf modal:", err);
+      // Fallback: still open modal with safe defaults
+      setShowEditTurfModal(true);
+    }
   };
 
   // Form submit handlers
@@ -446,34 +502,50 @@ const OwnerDashboardPage = () => {
     e.preventDefault();
     setModalError('');
     try {
-      const targetTurfId = editingTurf.id || myTurfs[0]?.id;
-      if (!targetTurfId) {
-        setModalError("No turf selected to update.");
-        return;
-      }
-      if (editingTurf.image_url && editingTurf.image_url.trim()) {
-        if (!isSupportedImage(editingTurf.image_url.trim())) {
+      let targetTurfId = editingTurf?.id || myTurfs?.[0]?.id;
+
+      const imgVal = typeof editingTurf?.image_url === 'string' ? editingTurf.image_url.trim() : '';
+      if (imgVal) {
+        if (!isSupportedImage(imgVal)) {
           setModalError("Invalid image type! PDF, PPT, and DOC files are not supported. Only JPG, PNG, and WEBP image files are allowed.");
           return;
         }
       }
+
+      const safeSports = typeof editingTurf?.sports_supported === 'string'
+        ? editingTurf.sports_supported
+        : (Array.isArray(editingTurf?.sports_supported) ? editingTurf.sports_supported.join(', ') : 'Football (5v5), Box Cricket');
+
+      const safeFacilities = Array.isArray(editingTurf?.facilities)
+        ? editingTurf.facilities
+        : (typeof editingTurf?.facilities === 'string'
+            ? editingTurf.facilities.split(',').map(s => s.trim()).filter(Boolean)
+            : ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"]);
+
       const payload = {
-        name: editingTurf.name,
-        city: editingTurf.city,
-        address: editingTurf.address,
-        pincode: editingTurf.pincode || '',
-        contact_phone: editingTurf.contact_phone || '',
-        contact_email: editingTurf.contact_email || '',
-        starting_price: Number(editingTurf.starting_price) || 1200,
-        dimension_text: editingTurf.dimension_text || "6000 sq ft",
-        opening_time: editingTurf.opening_time || "06:00 AM",
-        closing_time: editingTurf.closing_time || "11:00 PM",
-        sports_supported: editingTurf.sports_supported,
-        description: editingTurf.description,
-        facilities: editingTurf.facilities || ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
-        images: editingTurf.image_url ? [editingTurf.image_url] : ["https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80"]
+        name: editingTurf?.name || user?.business_name || 'My Turf',
+        city: editingTurf?.city || user?.city || 'Kochi',
+        address: editingTurf?.address || (user?.city ? `${user.city}, Kerala` : 'Near Stadium Road, Kochi'),
+        pincode: editingTurf?.pincode || '',
+        contact_phone: editingTurf?.contact_phone || user?.phone || '',
+        contact_email: editingTurf?.contact_email || user?.email || '',
+        starting_price: Number(editingTurf?.starting_price) || 1200,
+        dimension_text: editingTurf?.dimension_text || "6000 sq ft",
+        opening_time: editingTurf?.opening_time || "06:00 AM",
+        closing_time: editingTurf?.closing_time || "11:00 PM",
+        sports_supported: safeSports,
+        description: editingTurf?.description || '',
+        facilities: safeFacilities,
+        images: imgVal ? [imgVal] : ["https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1200&q=80"]
       };
-      await turfsAPI.update(targetTurfId, payload);
+
+      if (!targetTurfId) {
+        const created = await turfsAPI.create(payload);
+        targetTurfId = created.data?.id;
+      } else {
+        await turfsAPI.update(targetTurfId, payload);
+      }
+
       setModalSuccess("Turf profile details updated successfully!");
       fetchDashboard();
       setTimeout(() => {
@@ -481,6 +553,7 @@ const OwnerDashboardPage = () => {
         setShowEditTurfModal(false);
       }, 1200);
     } catch (err) {
+      console.error("Save turf error:", err);
       const detail = err.response?.data?.detail;
       setModalError(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0].msg : "Failed to update turf details."));
     }
@@ -1795,7 +1868,7 @@ const OwnerDashboardPage = () => {
       {showEditTurfModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-lg relative fade-in max-h-[90vh] overflow-y-auto">
-            <button onClick={() => setShowEditTurfModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
+            <button onClick={() => setShowEditTurfModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"><X className="w-5 h-5" /></button>
             <h3 className="text-base font-bold text-slate-900 mb-1">Edit Turf Profile & Details</h3>
             <p className="text-xs text-slate-500 mb-4">Update facility details, sports offered, amenities, location, and photos under your registered turf name.</p>
             {modalSuccess && <div className="p-3 mb-3 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">{modalSuccess}</div>}
@@ -1809,7 +1882,7 @@ const OwnerDashboardPage = () => {
                 <input
                   type="text"
                   required
-                  value={editingTurf.name}
+                  value={editingTurf?.name || ''}
                   onChange={(e) => setEditingTurf({ ...editingTurf, name: e.target.value })}
                   placeholder="e.g. Sidharth Arena"
                   className="w-full px-3 py-2 border rounded-lg font-bold text-slate-900 bg-slate-50"
@@ -1822,14 +1895,14 @@ const OwnerDashboardPage = () => {
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Select District / City</label>
                   <select
-                    value={editingTurf.city}
+                    value={editingTurf?.city || 'Kochi'}
                     onChange={(e) => setEditingTurf({ ...editingTurf, city: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg bg-white font-medium text-slate-800"
                   >
-                    {editingTurf.city && !KERALA_DISTRICTS.includes(editingTurf.city) && (
+                    {editingTurf?.city && Array.isArray(KERALA_DISTRICTS) && !KERALA_DISTRICTS.includes(editingTurf.city) && (
                       <option value={editingTurf.city}>{editingTurf.city}</option>
                     )}
-                    {KERALA_DISTRICTS.map(dist => (
+                    {Array.isArray(KERALA_DISTRICTS) && KERALA_DISTRICTS.map(dist => (
                       <option key={dist} value={dist}>{dist}</option>
                     ))}
                   </select>
@@ -1840,7 +1913,7 @@ const OwnerDashboardPage = () => {
                     type="number"
                     required
                     min="1"
-                    value={editingTurf.starting_price}
+                    value={editingTurf?.starting_price ?? 1200}
                     onChange={(e) => setEditingTurf({ ...editingTurf, starting_price: Number(e.target.value) })}
                     className="w-full px-3 py-2 border rounded-lg font-mono font-bold"
                   />
@@ -1854,7 +1927,7 @@ const OwnerDashboardPage = () => {
                   <input
                     type="text"
                     required
-                    value={editingTurf.address}
+                    value={editingTurf?.address || ''}
                     onChange={(e) => setEditingTurf({ ...editingTurf, address: e.target.value })}
                     placeholder="e.g. Near Stadium Road, Kakkanad"
                     className="w-full px-3 py-2 border rounded-lg"
@@ -1864,7 +1937,7 @@ const OwnerDashboardPage = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Pincode</label>
                   <input
                     type="text"
-                    value={editingTurf.pincode}
+                    value={editingTurf?.pincode || ''}
                     onChange={(e) => setEditingTurf({ ...editingTurf, pincode: e.target.value })}
                     placeholder="682017"
                     className="w-full px-3 py-2 border rounded-lg"
@@ -1878,7 +1951,7 @@ const OwnerDashboardPage = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Facility Phone</label>
                   <input
                     type="text"
-                    value={editingTurf.contact_phone}
+                    value={editingTurf?.contact_phone || ''}
                     onChange={(e) => setEditingTurf({ ...editingTurf, contact_phone: e.target.value })}
                     placeholder="e.g. 9847012345"
                     className="w-full px-3 py-2 border rounded-lg"
@@ -1888,7 +1961,7 @@ const OwnerDashboardPage = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Facility Email</label>
                   <input
                     type="email"
-                    value={editingTurf.contact_email}
+                    value={editingTurf?.contact_email || ''}
                     onChange={(e) => setEditingTurf({ ...editingTurf, contact_email: e.target.value })}
                     placeholder="owner@playsport.com"
                     className="w-full px-3 py-2 border rounded-lg"
@@ -1902,7 +1975,7 @@ const OwnerDashboardPage = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Opening Time</label>
                   <input
                     type="text"
-                    value={editingTurf.opening_time}
+                    value={editingTurf?.opening_time || '06:00 AM'}
                     onChange={(e) => setEditingTurf({ ...editingTurf, opening_time: e.target.value })}
                     placeholder="06:00 AM"
                     className="w-full px-3 py-2 border rounded-lg text-xs"
@@ -1912,7 +1985,7 @@ const OwnerDashboardPage = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Closing Time</label>
                   <input
                     type="text"
-                    value={editingTurf.closing_time}
+                    value={editingTurf?.closing_time || '11:00 PM'}
                     onChange={(e) => setEditingTurf({ ...editingTurf, closing_time: e.target.value })}
                     placeholder="11:00 PM"
                     className="w-full px-3 py-2 border rounded-lg text-xs"
@@ -1922,7 +1995,7 @@ const OwnerDashboardPage = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Turf Size / Dim.</label>
                   <input
                     type="text"
-                    value={editingTurf.dimension_text}
+                    value={editingTurf?.dimension_text || '6000 sq ft'}
                     onChange={(e) => setEditingTurf({ ...editingTurf, dimension_text: e.target.value })}
                     placeholder="6000 sq ft"
                     className="w-full px-3 py-2 border rounded-lg text-xs"
@@ -1946,7 +2019,10 @@ const OwnerDashboardPage = () => {
                     { label: '🏀 Basketball', val: 'Basketball' },
                     { label: '🏓 Table Tennis', val: 'Table Tennis' }
                   ].map((sport) => {
-                    const sportsLower = (editingTurf.sports_supported || '').toLowerCase();
+                    const sportsStr = typeof editingTurf?.sports_supported === 'string'
+                      ? editingTurf.sports_supported
+                      : (Array.isArray(editingTurf?.sports_supported) ? editingTurf.sports_supported.join(', ') : '');
+                    const sportsLower = sportsStr.toLowerCase();
                     const isSelected = sportsLower.includes(sport.val.toLowerCase()) ||
                       (sport.val === 'Football (5v5)' && (sportsLower.includes('5v5 football') || sportsLower.includes('football (5v5)') || sportsLower === 'football')) ||
                       (sport.val === 'Box Cricket' && (sportsLower.includes('box cricket') || sportsLower.includes('cricket')));
@@ -1955,8 +2031,8 @@ const OwnerDashboardPage = () => {
                         key={sport.val}
                         type="button"
                         onClick={() => {
-                          const currentList = editingTurf.sports_supported
-                            ? editingTurf.sports_supported.split(',').map(s => s.trim()).filter(Boolean)
+                          const currentList = sportsStr
+                            ? sportsStr.split(',').map(s => s.trim()).filter(Boolean)
                             : ['Football (5v5)', 'Box Cricket'];
 
                           let updatedList;
@@ -1967,7 +2043,7 @@ const OwnerDashboardPage = () => {
                           }
                           setEditingTurf({ ...editingTurf, sports_supported: updatedList.join(', ') });
                         }}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-between border ${isSelected
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-between border cursor-pointer ${isSelected
                             ? 'bg-brand-700 text-white border-brand-700 shadow-2xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                           }`}
@@ -1998,22 +2074,29 @@ const OwnerDashboardPage = () => {
                     "Cafeteria",
                     "Locker Rooms"
                   ].map((fac) => {
-                    const currentFacs = editingTurf.facilities || [];
-                    const isSelected = currentFacs.includes(fac);
+                    const currentFacs = Array.isArray(editingTurf?.facilities)
+                      ? editingTurf.facilities
+                      : (typeof editingTurf?.facilities === 'string'
+                          ? (editingTurf.facilities.startsWith('[')
+                              ? (() => { try { const p = JSON.parse(editingTurf.facilities); return Array.isArray(p) ? p : editingTurf.facilities.split(','); } catch { return editingTurf.facilities.split(','); } })()
+                              : editingTurf.facilities.split(',').map(s => s.trim()).filter(Boolean))
+                          : ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"]);
+                    const isSelected = Array.isArray(currentFacs) && currentFacs.includes(fac);
                     return (
                       <button
                         key={fac}
                         type="button"
                         onClick={() => {
+                          const safeList = Array.isArray(currentFacs) ? currentFacs : [];
                           let updatedFacs;
                           if (isSelected) {
-                            updatedFacs = currentFacs.filter(f => f !== fac);
+                            updatedFacs = safeList.filter(f => f !== fac);
                           } else {
-                            updatedFacs = [...currentFacs, fac];
+                            updatedFacs = [...safeList, fac];
                           }
                           setEditingTurf({ ...editingTurf, facilities: updatedFacs });
                         }}
-                        className={`py-1.5 px-2.5 rounded-lg text-[11px] font-semibold transition flex items-center justify-between border ${isSelected
+                        className={`py-1.5 px-2.5 rounded-lg text-[11px] font-semibold transition flex items-center justify-between border cursor-pointer ${isSelected
                             ? 'bg-emerald-700 text-white border-emerald-700'
                             : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                           }`}
@@ -2060,31 +2143,38 @@ const OwnerDashboardPage = () => {
                   </label>
                 </div>
 
-                <input
-                  type="text"
-                  value={editingTurf.image_url?.startsWith('data:image/') ? '' : (editingTurf.image_url || '')}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val && !isSupportedImage(val)) {
-                      setModalError("Invalid image type! PDF, PPT, and DOC files are not allowed. Please enter a valid JPG, PNG, or WEBP photo URL.");
-                    } else {
-                      setModalError("");
-                    }
-                    setEditingTurf({ ...editingTurf, image_url: val });
-                  }}
-                  placeholder={editingTurf.image_url?.startsWith('data:image/') ? "Local image loaded (click upload above to change or paste URL here)" : "Or paste HD image URL (https://...)"}
-                  className="w-full px-3 py-2 border rounded-lg font-mono text-[11px]"
-                />
+                {(() => {
+                  const imageUrlStr = typeof editingTurf?.image_url === 'string' ? editingTurf.image_url : '';
+                  return (
+                    <>
+                      <input
+                        type="text"
+                        value={imageUrlStr.startsWith('data:image/') ? '' : imageUrlStr}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val && !isSupportedImage(val)) {
+                            setModalError("Invalid image type! PDF, PPT, and DOC files are not allowed. Please enter a valid JPG, PNG, or WEBP photo URL.");
+                          } else {
+                            setModalError("");
+                          }
+                          setEditingTurf({ ...editingTurf, image_url: val });
+                        }}
+                        placeholder={imageUrlStr.startsWith('data:image/') ? "Local image loaded (click upload above to change or paste URL here)" : "Or paste HD image URL (https://...)"}
+                        className="w-full px-3 py-2 border rounded-lg font-mono text-[11px]"
+                      />
 
-                {/* Live Photo Preview */}
-                {editingTurf.image_url && isSupportedImage(editingTurf.image_url) && (
-                  <div className="mt-2.5 space-y-1">
-                    <p className="text-[11px] font-bold text-slate-600">Cover Photo Preview:</p>
-                    <div className="h-36 w-full rounded-xl border-2 border-brand-300 overflow-hidden relative shadow-sm">
-                      <img src={editingTurf.image_url} alt="Live Cover Preview" className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                )}
+                      {/* Live Photo Preview */}
+                      {imageUrlStr && isSupportedImage(imageUrlStr) && (
+                        <div className="mt-2.5 space-y-1">
+                          <p className="text-[11px] font-bold text-slate-600">Cover Photo Preview:</p>
+                          <div className="h-36 w-full rounded-xl border-2 border-brand-300 overflow-hidden relative shadow-sm">
+                            <img src={imageUrlStr} alt="Live Cover Preview" className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Description */}
@@ -2092,14 +2182,14 @@ const OwnerDashboardPage = () => {
                 <label className="block font-semibold text-slate-700 mb-1">Facility Description</label>
                 <textarea
                   rows="3"
-                  value={editingTurf.description}
+                  value={editingTurf?.description || ''}
                   onChange={(e) => setEditingTurf({ ...editingTurf, description: e.target.value })}
                   placeholder="Describe your sports turf facilities, lighting, surface quality..."
                   className="w-full px-3 py-2 border rounded-lg"
                 />
               </div>
 
-              <button type="submit" className="w-full mt-3 py-2.5 bg-brand-700 hover:bg-brand-800 text-white font-bold rounded-lg shadow-sm transition">
+              <button type="submit" className="w-full mt-3 py-2.5 bg-brand-700 hover:bg-brand-800 text-white font-bold rounded-lg shadow-sm transition cursor-pointer">
                 💾 Save Turf Profile Details
               </button>
             </form>
