@@ -29,11 +29,24 @@ class UserBase(BaseModel):
     def validate_phone(cls, v):
         if v is None:
             return v
-        digits = re.sub(r"\D", "", v)
+        val_str = str(v).strip()
+        if not val_str:
+            raise ValueError("Phone number is required.")
+        digits = re.sub(r"\D", "", val_str)
+        if len(digits) == 12 and digits.startswith("91"):
+            digits = digits[2:]
+        elif len(digits) == 11 and digits.startswith("0"):
+            digits = digits[1:]
         if len(digits) != 10:
             raise ValueError("Phone number must be exactly 10 digits.")
-        if not re.match(r"^[6-9]", digits):
-            raise ValueError("Phone number must start with 6, 7, 8, or 9 (Indian mobile).")
+        if digits[0] not in "6789":
+            raise ValueError("10-digit mobile number must begin with 6, 7, 8, or 9.")
+        if len(set(digits[:7])) == 1:
+            raise ValueError("The first 7 digits cannot be the same number.")
+        if len(set(digits)) == 1:
+            raise ValueError("Phone number cannot consist of all identical digits.")
+        if re.search(r"(\d)\1{6,}", digits):
+            raise ValueError("Phone number cannot have more than 6 repetitive digits.")
         return digits  # store only digits
 
     @field_validator("full_name")
@@ -45,6 +58,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
+    phone: str = Field(..., min_length=10, max_length=15)
     password: str = Field(..., min_length=8)
 
     @field_validator("password")
@@ -64,6 +78,7 @@ class UserCreate(UserBase):
 
 
 class OwnerRegister(UserBase):
+    phone: str = Field(..., min_length=10, max_length=15)
     password: str = Field(..., min_length=8)
 
     @field_validator("password")

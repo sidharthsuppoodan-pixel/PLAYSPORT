@@ -45,10 +45,24 @@ const VALIDATORS = {
     return '';
   },
   phone: (v) => {
-    if (!v.trim()) return 'Phone number is required.';
-    const digits = v.replace(/\D/g, '');
-    if (digits.length !== 10) return 'Phone number must be exactly 10 digits.';
-    if (!/^[6-9]/.test(digits)) return 'Phone must start with 6, 7, 8, or 9 (Indian mobile).';
+    if (!v || !v.trim()) return 'Phone number is required.';
+    let clean = v.trim().replace(/\D/g, '');
+    if (clean.length === 12 && clean.startsWith('91')) {
+      clean = clean.slice(2);
+    } else if (clean.length === 11 && clean.startsWith('0')) {
+      clean = clean.slice(1);
+    }
+    if (clean.length !== 10) return 'Phone number must be exactly 10 digits.';
+    if (!/^[6-9]/.test(clean)) return '10-digit mobile number must begin with 6, 7, 8, or 9.';
+    if (/^(\d)\1{6}/.test(clean)) {
+      return 'The first 7 digits cannot be the same number.';
+    }
+    if (/^(\d)\1{9}$/.test(clean)) {
+      return 'Phone number cannot consist of all identical digits.';
+    }
+    if (/(\d)\1{6,}/.test(clean)) {
+      return 'Phone number cannot have more than 6 repetitive digits.';
+    }
     return '';
   },
   password: (v) => {
@@ -174,7 +188,13 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
     } else if (name === 'email') {
       nextValue = value.toLowerCase();
     } else if (name === 'phone') {
-      nextValue = value.replace(/\D/g, '').slice(0, 10);
+      let clean = value.replace(/\D/g, '');
+      if (clean.length === 12 && clean.startsWith('91')) {
+        clean = clean.slice(2);
+      } else if (clean.length === 11 && clean.startsWith('0')) {
+        clean = clean.slice(1);
+      }
+      nextValue = clean.slice(0, 10);
     }
     const updatedForm = { ...formData, [name]: nextValue };
     setFormData(updatedForm);
@@ -528,7 +548,7 @@ const AuthModal = ({ isOpen, initialMode = 'login', onClose }) => {
                   </span>
                 </div>
                 <FieldFeedback name="phone" />
-                {!touched.phone && <p className="mt-1 text-[10px] text-slate-400">Indian mobile · starts with 6–9 · exactly 10 digits</p>}
+                {!touched.phone && <p className="mt-1 text-[10px] text-slate-400">Indian mobile · starts with 6–9 · 10 digits · max 6 repetitive digits</p>}
               </div>
             )}
 
