@@ -206,7 +206,18 @@ def seed_database(reset_db: bool = False):
             is_verified=True,
             is_approved=True
         )
-        db.add_all([customer1, customer2, customer3, customer4, customer5])
+        customer_player = User(
+            email="player@playsport.com",
+            username="playsport_player",
+            full_name="PlaySport Demo Player",
+            phone="9847112233",
+            hashed_password=get_password_hash("Customer@123"),
+            role=RoleEnum.CUSTOMER,
+            is_active=True,
+            is_verified=True,
+            is_approved=True
+        )
+        db.add_all([customer1, customer2, customer3, customer4, customer5, customer_player])
         db.flush()
 
         print("Seeding Turfs...")

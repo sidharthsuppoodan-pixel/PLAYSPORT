@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { reportsAPI, slotsAPI, turfsAPI, groundsAPI, openMatchesAPI, tournamentsAPI, equipmentAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import ErrorBoundary from '../components/ErrorBoundary';
 import {
   LayoutDashboard,
   Building,
@@ -339,6 +340,23 @@ const OwnerDashboardPage = () => {
     } catch (err) {
       console.error("Error opening edit turf modal:", err);
       // Fallback: still open modal with safe defaults
+      setEditingTurf({
+        id: '',
+        name: user?.business_name || (user?.full_name ? `${user.full_name}'s Sports Arena` : 'My Turf'),
+        city: user?.city || 'Kochi',
+        address: user?.city ? `${user.city}, Kerala` : 'Near Stadium Road, Kochi',
+        pincode: '',
+        contact_phone: user?.phone || '',
+        contact_email: user?.email || '',
+        starting_price: 1200,
+        dimension_text: '6000 sq ft',
+        sports_supported: 'Football (5v5), Box Cricket',
+        facilities: ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"],
+        image_url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80',
+        description: '',
+        opening_time: '06:00 AM',
+        closing_time: '11:00 PM'
+      });
       setShowEditTurfModal(true);
     }
   };
@@ -1874,7 +1892,29 @@ const OwnerDashboardPage = () => {
             {modalSuccess && <div className="p-3 mb-3 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">{modalSuccess}</div>}
             {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold">{modalError}</div>}
 
-            <form onSubmit={handleSaveTurfDetails} className="space-y-3.5 text-xs">
+            <ErrorBoundary fallback={(error, reset) => (
+              <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 space-y-3 my-2">
+                <p className="font-bold text-sm">Unable to render turf profile editor</p>
+                <p className="text-xs font-mono">{error?.message || 'Unexpected error'}</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { reset(); openEditModal(null); }}
+                    className="px-3 py-1.5 bg-brand-700 hover:bg-brand-800 text-white rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    Reset with Defaults
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditTurfModal(false)}
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}>
+              <form onSubmit={handleSaveTurfDetails} className="space-y-3.5 text-xs">
 
               {/* Registered Turf Name */}
               <div>
@@ -2193,6 +2233,7 @@ const OwnerDashboardPage = () => {
                 💾 Save Turf Profile Details
               </button>
             </form>
+            </ErrorBoundary>
           </div>
         </div>
       )}
