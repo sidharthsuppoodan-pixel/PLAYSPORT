@@ -759,28 +759,6 @@ const OwnerDashboardPage = () => {
               Welcome back, <strong>{user?.full_name}</strong>. Managing Turf: <span className="text-brand-700 font-bold">{(Array.isArray(myTurfs) ? myTurfs : []).map(t => t?.name).filter(Boolean).join(', ') || user?.business_name || 'My Turf'}</span>
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openEditModal(Array.isArray(myTurfs) && myTurfs.length > 0 ? myTurfs[0] : null)}
-              className="py-2 px-3 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
-            >
-              ✏️ Edit Turf Profile
-            </button>
-            <button
-              onClick={() => setShowManageSlotsModal(true)}
-              className="py-2 px-3 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5"
-            >
-              <Calendar className="w-3.5 h-3.5" /> Add Slots
-            </button>
-            <button
-              onClick={() => setShowCreateMatchModal(true)}
-              className="py-2 px-3 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5"
-            >
-              <Trophy className="w-3.5 h-3.5" /> Host Match
-            </button>
-          </div>
         </div>
 
         {/* ─── TAB 1: OVERVIEW DASHBOARD ────────────────────────────────────────── */}
@@ -2196,37 +2174,17 @@ const OwnerDashboardPage = () => {
                   </label>
                 </div>
 
+                {/* Live Photo Preview */}
                 {(() => {
                   const imageUrlStr = typeof editingTurf?.image_url === 'string' ? editingTurf.image_url : '';
-                  return (
-                    <>
-                      <input
-                        type="text"
-                        value={imageUrlStr.startsWith('data:image/') ? '' : imageUrlStr}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val && !isSupportedImage(val)) {
-                            setModalError("Invalid image type! PDF, PPT, and DOC files are not allowed. Please enter a valid JPG, PNG, or WEBP photo URL.");
-                          } else {
-                            setModalError("");
-                          }
-                          setEditingTurf({ ...editingTurf, image_url: val });
-                        }}
-                        placeholder={imageUrlStr.startsWith('data:image/') ? "Local image loaded (click upload above to change or paste URL here)" : "Or paste HD image URL (https://...)"}
-                        className="w-full px-3 py-2 border rounded-lg font-mono text-[11px]"
-                      />
-
-                      {/* Live Photo Preview */}
-                      {imageUrlStr && isSupportedImage(imageUrlStr) && (
-                        <div className="mt-2.5 space-y-1">
-                          <p className="text-[11px] font-bold text-slate-600">Cover Photo Preview:</p>
-                          <div className="h-36 w-full rounded-xl border-2 border-brand-300 overflow-hidden relative shadow-sm">
-                            <img src={imageUrlStr} alt="Live Cover Preview" className="w-full h-full object-cover" />
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  );
+                  return imageUrlStr && isSupportedImage(imageUrlStr) ? (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-[11px] font-bold text-slate-600">Cover Photo Preview:</p>
+                      <div className="h-36 w-full rounded-xl border-2 border-brand-300 overflow-hidden relative shadow-sm">
+                        <img src={imageUrlStr} alt="Live Cover Preview" className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  ) : null;
                 })()}
               </div>
 
@@ -2487,23 +2445,8 @@ const OwnerDashboardPage = () => {
                   </label>
                 </div>
 
-                <input
-                  type="text"
-                  placeholder="Or paste HD cover photo URL (https://...)"
-                  value={newTurfData.image_url}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val && !isSupportedImage(val)) {
-                      setModalError("Invalid image type! PDF, PPT, and DOC files are not supported. Only JPG/PNG images are allowed.");
-                    } else {
-                      setModalError("");
-                    }
-                    setNewTurfData({ ...newTurfData, image_url: val });
-                  }}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg font-medium text-slate-700 text-xs"
-                />
                 <p className="text-[10px] text-slate-400 mt-1">
-                  💡 Document files (PDF, PPT, DOC) are rejected. If left blank, an HD cover photo will be chosen.
+                  💡 Document files (PDF, PPT, DOC) are rejected. Only JPG, PNG, and WEBP images are allowed.
                 </p>
 
                 {/* Live Cover Photo Preview */}

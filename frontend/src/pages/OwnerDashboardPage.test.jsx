@@ -91,7 +91,7 @@ describe('OwnerDashboardPage - Edit Turf Profile & White Screen Protection', () 
     vi.clearAllMocks();
   });
 
-  it('renders the owner dashboard and shows Edit Turf Profile button', async () => {
+  it('renders the owner dashboard and shows Edit Turf Profile button under My Turfs tab', async () => {
     render(
       <BrowserRouter>
         <OwnerDashboardPage />
@@ -103,7 +103,10 @@ describe('OwnerDashboardPage - Edit Turf Profile & White Screen Protection', () 
       expect(screen.getByText(/Turf Owner Console/i)).toBeInTheDocument();
     });
 
-    // Check that Edit Turf Profile button is rendered in the header
+    // Switch to My Turfs tab
+    fireEvent.click(screen.getByRole('button', { name: /My Turfs/i }));
+
+    // Check that Edit Turf Profile button is rendered in the My Turfs tab
     const editButtons = screen.getAllByRole('button', { name: /Edit Turf Profile/i });
     expect(editButtons.length).toBeGreaterThan(0);
   });
@@ -118,6 +121,9 @@ describe('OwnerDashboardPage - Edit Turf Profile & White Screen Protection', () 
     await waitFor(() => {
       expect(screen.getByText(/Turf Owner Console/i)).toBeInTheDocument();
     });
+
+    // Switch to My Turfs tab
+    fireEvent.click(screen.getByRole('button', { name: /My Turfs/i }));
 
     const editBtn = screen.getAllByRole('button', { name: /Edit Turf Profile/i })[0];
     fireEvent.click(editBtn);
@@ -152,6 +158,9 @@ describe('OwnerDashboardPage - Edit Turf Profile & White Screen Protection', () 
     await waitFor(() => {
       expect(screen.getByText(/Turf Owner Console/i)).toBeInTheDocument();
     });
+
+    // Switch to My Turfs tab
+    fireEvent.click(screen.getByRole('button', { name: /My Turfs/i }));
 
     const editButtons = screen.getAllByRole('button', { name: /Edit Turf Profile/i });
     expect(editButtons.length).toBeGreaterThan(0);
