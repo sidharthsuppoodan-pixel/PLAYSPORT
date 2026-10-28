@@ -62,8 +62,8 @@ const PaymentModal = ({
   const isMock = razorpayConfig?.is_mock || false;
 
   // Authentic NPCI UPI Intent URI standard
-  const upiVpa = 'playsport.arena@icici';
-  const upiPayeeName = 'PLAYSPORT Arena';
+  const upiVpa = import.meta.env.VITE_UPI_VPA || 'sidharths251202-2@okicici';
+  const upiPayeeName = import.meta.env.VITE_UPI_PAYEE_NAME || 'Sidharth S';
   const transactionRef = `PS${Date.now().toString().slice(-8)}`;
   const transactionNote = orderDetails.title || 'PLAYSPORT Sports Booking';
   const upiIntentUri = `upi://pay?pa=${upiVpa}&pn=${encodeURIComponent(upiPayeeName)}&am=${totalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(transactionNote)}&tr=${transactionRef}`;
