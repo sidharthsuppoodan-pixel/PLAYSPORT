@@ -53,6 +53,8 @@ class BookingDetailOut(BookingOut):
     payment_status: Optional[str] = "SUCCESS"
     payment_id: Optional[str] = None
     equipment_rentals: List[EquipmentRentalItemOut] = []
+    can_cancel: bool = True
+    is_past: bool = False
 
     class Config:
         from_attributes = True

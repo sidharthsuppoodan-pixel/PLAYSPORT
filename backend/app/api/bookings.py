@@ -13,6 +13,7 @@ from app.models.notification import Notification, NotificationTypeEnum
 from app.models.equipment import Equipment, EquipmentRental
 from app.models.user import User, RoleEnum
 from app.schemas.booking import BookingCreate, BookingOut, BookingDetailOut, BookingCancelRequest, EquipmentRentalItemOut
+from app.api.slots import parse_slot_time_to_datetime
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -220,6 +221,12 @@ def get_my_bookings(
                 quantity=r.quantity,
                 total_price=r.total_price
             ))
+        now = datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        start_dt = parse_slot_time_to_datetime(b.booking_date, b.start_time)
+        is_past = (start_dt and start_dt <= now) or (b.booking_date < today_str)
+        can_cancel = (b.status == BookingStatusEnum.CONFIRMED) and not is_past
+
         results.append(BookingDetailOut(
             id=b.id,
             booking_reference=b.booking_reference,
@@ -243,7 +250,9 @@ def get_my_bookings(
             customer_phone=current_user.phone,
             payment_status=pay.status.value if pay else "SUCCESS",
             payment_id=pay.transaction_id if pay else "TXN-0000",
-            equipment_rentals=rental_outs
+            equipment_rentals=rental_outs,
+            can_cancel=can_cancel,
+            is_past=is_past
         ))
     return results
 
@@ -274,6 +283,12 @@ def get_booking_detail(
             total_price=r.total_price
         ))
 
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    start_dt = parse_slot_time_to_datetime(booking.booking_date, booking.start_time)
+    is_past = (start_dt and start_dt <= now) or (booking.booking_date < today_str)
+    can_cancel = (booking.status == BookingStatusEnum.CONFIRMED) and not is_past
+
     return BookingDetailOut(
         id=booking.id,
         booking_reference=booking.booking_reference,
@@ -297,7 +312,9 @@ def get_booking_detail(
         customer_phone=booking.user.phone if booking.user else None,
         payment_status=pay.status.value if pay else "SUCCESS",
         payment_id=pay.transaction_id if pay else None,
-        equipment_rentals=rental_outs
+        equipment_rentals=rental_outs,
+        can_cancel=can_cancel,
+        is_past=is_past
     )
 
 @router.post("/{booking_id}/cancel", response_model=dict)
@@ -316,6 +333,16 @@ def cancel_booking(
 
     if booking.status == BookingStatusEnum.CANCELLED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking already cancelled")
+
+    # Guard: Cannot cancel past or commenced bookings
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    booking_start_dt = parse_slot_time_to_datetime(booking.booking_date, booking.start_time)
+    if (booking_start_dt and booking_start_dt <= now) or (booking.booking_date < today_str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel a booking whose scheduled time has already commenced or passed."
+        )
 
     booking.status = BookingStatusEnum.CANCELLED
     booking.cancellation_reason = cancel_in.reason

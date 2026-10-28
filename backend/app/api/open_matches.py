@@ -28,6 +28,7 @@ def parse_slot_time_to_datetime(date_str: str, time_str: str) -> Optional[dateti
 def list_open_matches(
     sport: Optional[str] = Query(None),
     status_filter: Optional[str] = Query(None),
+    include_past: bool = Query(False, description="Whether to include matches whose time has expired"),
     current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db)
 ):
@@ -40,6 +41,7 @@ def list_open_matches(
     matches = query.order_by(OpenMatch.match_date.asc(), OpenMatch.start_time.asc()).all()
     results = []
     now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
 
     user_turf_ids = []
     if current_user and current_user.role == RoleEnum.OWNER:
@@ -50,17 +52,16 @@ def list_open_matches(
 
         # Check if match start time has already passed
         match_start_dt = parse_slot_time_to_datetime(m.match_date, m.start_time)
-        if match_start_dt and match_start_dt <= now:
-            # Hide expired matches from users who have NOT joined or hosted it, unless they are the turf owner
-            is_user_participant = False
-            if current_user:
-                is_user_participant = (
-                    m.creator_id == current_user.id or
-                    any(p.user_id == current_user.id for p in participants) or
-                    current_user.role == RoleEnum.ADMIN or
-                    m.turf_id in user_turf_ids
-                )
-            if not is_user_participant:
+        is_time_up = (match_start_dt and match_start_dt <= now) or (m.match_date < today_str)
+
+        if is_time_up:
+            # Auto-update status to COMPLETED once time is up
+            if m.status in [MatchStatusEnum.OPEN, MatchStatusEnum.FULL]:
+                m.status = MatchStatusEnum.COMPLETED
+                db.commit()
+
+            # Automatically remove from active slot booking once time is up
+            if not include_past:
                 continue
 
         turf = db.query(Turf).filter(Turf.id == m.turf_id).first()
@@ -292,6 +293,19 @@ def join_open_match(
     if match.status == MatchStatusEnum.CANCELLED or match.status == MatchStatusEnum.COMPLETED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Match is no longer active.")
 
+    # Time Guard: Check if match start time has passed
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    match_start_dt = parse_slot_time_to_datetime(match.match_date, match.start_time)
+    if (match_start_dt and match_start_dt <= now) or (match.match_date < today_str):
+        if match.status != MatchStatusEnum.COMPLETED:
+            match.status = MatchStatusEnum.COMPLETED
+            db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Time is up for this open match. Slot booking is closed."
+        )
+
     # Strict Capacity Guard
     if match.current_players >= match.max_players:
         match.status = MatchStatusEnum.FULL
@@ -360,6 +374,16 @@ def leave_open_match(
     ).first()
     if not participant:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You are not a participant in this match.")
+
+    # Time Guard: Check if match start time has passed
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    match_start_dt = parse_slot_time_to_datetime(match.match_date, match.start_time)
+    if (match_start_dt and match_start_dt <= now) or (match.match_date < today_str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel participation for a match that has already started or ended."
+        )
 
     if match.creator_id == current_user.id:
         raise HTTPException(

@@ -34,6 +34,7 @@ from app.schemas.payment import (
 )
 from app.schemas.booking import BookingDetailOut, EquipmentRentalItemOut
 from app.services.razorpay_service import razorpay_service
+from app.api.slots import parse_slot_time_to_datetime
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -771,6 +772,16 @@ def create_match_order(
     if match.status in [MatchStatusEnum.CANCELLED, MatchStatusEnum.COMPLETED]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Match is no longer active.")
 
+    # Time Guard: Check if match time has passed
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    match_start_dt = parse_slot_time_to_datetime(match.match_date, match.start_time)
+    if (match_start_dt and match_start_dt <= now) or (match.match_date < today_str):
+        if match.status != MatchStatusEnum.COMPLETED:
+            match.status = MatchStatusEnum.COMPLETED
+            db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Time is up for this open match. Slot booking is closed.")
+
     if match.current_players >= match.max_players:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Match is full. No slots remaining.")
 
@@ -839,6 +850,15 @@ def verify_match_join(
 
     if not match:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Open match not found")
+
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    match_start_dt = parse_slot_time_to_datetime(match.match_date, match.start_time)
+    if (match_start_dt and match_start_dt <= now) or (match.match_date < today_str):
+        if match.status != MatchStatusEnum.COMPLETED:
+            match.status = MatchStatusEnum.COMPLETED
+            db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Time is up for this open match. Slot booking is closed.")
 
     if match.current_players >= match.max_players:
         match.status = MatchStatusEnum.FULL

@@ -16,6 +16,31 @@ import {
   UserX
 } from 'lucide-react';
 
+const isMatchTimeUp = (matchDate, startTime) => {
+  if (!matchDate) return false;
+  try {
+    const now = new Date();
+    const [y, m, d] = matchDate.split('-').map(Number);
+    if (!y || !m || !d) return false;
+    let hours = 23, minutes = 59;
+    if (startTime) {
+      const match = startTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+      if (match) {
+        hours = parseInt(match[1], 10);
+        minutes = parseInt(match[2], 10);
+        const meridian = match[3];
+        if (meridian) {
+          if (meridian.toUpperCase() === 'PM' && hours < 12) hours += 12;
+          if (meridian.toUpperCase() === 'AM' && hours === 12) hours = 0;
+        }
+      }
+    }
+    return new Date(y, m - 1, d, hours, minutes) <= now;
+  } catch {
+    return false;
+  }
+};
+
 const OpenMatchesPage = ({ onOpenAuth }) => {
   const { user, isAuthenticated, isOwner, isAdmin } = useAuth();
   const [matches, setMatches] = useState([]);
@@ -84,6 +109,12 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
       onOpenAuth('login');
       return;
     }
+    if (isMatchTimeUp(match.match_date, match.start_time)) {
+      setErrorMsg("Time is up for this open match. Slot booking is closed.");
+      setTimeout(() => setErrorMsg(''), 4000);
+      fetchMatches();
+      return;
+    }
     setConfirmJoinMatch(match);
   };
 
@@ -98,6 +129,14 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
   const handleConfirmJoin = async () => {
     if (!confirmJoinMatch) return;
     const matchId = confirmJoinMatch.id;
+
+    if (isMatchTimeUp(confirmJoinMatch.match_date, confirmJoinMatch.start_time)) {
+      setErrorMsg("Time is up for this open match. Slot booking is closed.");
+      setTimeout(() => setErrorMsg(''), 4000);
+      setConfirmJoinMatch(null);
+      fetchMatches();
+      return;
+    }
 
     // If match requires payment, open PaymentModal
     if (Number(confirmJoinMatch.price_per_player) > 0) {
@@ -134,6 +173,11 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
   };
 
   const openLeaveConfirmation = (match) => {
+    if (isMatchTimeUp(match.match_date, match.start_time)) {
+      setErrorMsg("Cannot cancel participation for a match that has already started or ended.");
+      setTimeout(() => setErrorMsg(''), 4000);
+      return;
+    }
     setConfirmLeaveMatch(match);
   };
 
@@ -242,168 +286,187 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
       )}
 
       {/* Matches Grid */}
-      {loading ? (
-        <div className="py-16 text-center text-xs text-slate-400">Loading open matches...</div>
-      ) : matches.length === 0 ? (
-        <div className="py-16 text-center bg-white rounded-xl border border-slate-200 p-8 space-y-2">
-          <p className="text-sm font-bold text-slate-700">No active open matches currently.</p>
-          <p className="text-xs text-slate-400">
-            {canHostMatch ? 'Be the first to host a match above!' : 'Check back soon for upcoming open matches.'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {matches.map((m) => {
-            const isFull = m.current_players >= m.max_players || m.status === 'FULL';
-            const alreadyJoined = user && m.participants?.some(p => p.user_id === user.id);
-            const isCreator = user && m.creator_id === user.id;
-            const isCricket = m.sport_type?.toLowerCase().includes('cricket');
+      {(() => {
+        const availableMatches = matches.filter(m => {
+          if (m.status === 'COMPLETED' || m.status === 'CANCELLED') return false;
+          return !isMatchTimeUp(m.match_date, m.start_time);
+        });
 
-            return (
-              <div
-                key={m.id}
-                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-3.5">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 relative">
-                        <img
-                          src={m.turf_image || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80'}
-                          alt={m.turf_name}
-                          className="w-full h-full object-cover"
-                        />
+        if (loading) {
+          return <div className="py-16 text-center text-xs text-slate-400">Loading open matches...</div>;
+        }
+
+        if (availableMatches.length === 0) {
+          return (
+            <div className="py-16 text-center bg-white rounded-xl border border-slate-200 p-8 space-y-2">
+              <p className="text-sm font-bold text-slate-700">No active open matches currently.</p>
+              <p className="text-xs text-slate-400">
+                {canHostMatch ? 'Be the first to host a match above!' : 'Check back soon for upcoming open matches.'}
+              </p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {availableMatches.map((m) => {
+              const isFull = m.current_players >= m.max_players || m.status === 'FULL';
+              const alreadyJoined = user && m.participants?.some(p => p.user_id === user.id);
+              const isCreator = user && m.creator_id === user.id;
+              const isCricket = m.sport_type?.toLowerCase().includes('cricket');
+              const timeIsUp = isMatchTimeUp(m.match_date, m.start_time);
+
+              return (
+                <div
+                  key={m.id}
+                  className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-3.5">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 relative">
+                          <img
+                            src={m.turf_image || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80'}
+                            alt={m.turf_name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-sm">{m.title}</h3>
+                          <p className="text-[11px] font-semibold text-brand-700 flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 text-brand-600" />
+                            {m.turf_name} ({m.turf_city})
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-slate-900 text-sm">{m.title}</h3>
-                        <p className="text-[11px] font-semibold text-brand-700 flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 text-brand-600" />
-                          {m.turf_name} ({m.turf_city})
-                        </p>
-                      </div>
+
+                      {/* Small Sport Image Badge */}
+                      {isCricket ? (
+                        <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shrink-0">
+                          <img
+                            src="https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=120&q=80"
+                            alt="Cricket"
+                            className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                          />
+                          <span>Cricket</span>
+                        </div>
+                      ) : (
+                        <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1 shrink-0">
+                          <img
+                            src="https://images.unsplash.com/photo-1614632537190-23e4146777db?auto=format&fit=crop&w=120&q=80"
+                            alt="Football"
+                            className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                          />
+                          <span>Football</span>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Small Sport Image Badge */}
-                    {isCricket ? (
-                      <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shrink-0">
-                        <img
-                          src="https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=120&q=80"
-                          alt="Cricket"
-                          className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
-                        />
-                        <span>Cricket</span>
+                    {/* Date & Time pill */}
+                    <div className="flex items-center gap-3 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg">
+                      <span className="font-semibold">{m.match_date}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        {m.start_time} - {m.end_time}
+                      </span>
+                    </div>
+
+                    {/* Player Capacity Bar */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-slate-400" />
+                          Players Registered
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {m.current_players} / {m.max_players}
+                        </span>
                       </div>
-                    ) : (
-                      <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1 shrink-0">
-                        <img
-                          src="https://images.unsplash.com/photo-1614632537190-23e4146777db?auto=format&fit=crop&w=120&q=80"
-                          alt="Football"
-                          className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isFull ? 'bg-rose-500' : 'bg-brand-600'
+                          }`}
+                          style={{ width: `${Math.min(100, (m.current_players / m.max_players) * 100)}%` }}
                         />
-                        <span>Football</span>
+                      </div>
+                      
+                      <span className="text-[10px] text-slate-400 block text-right">
+                        {isFull ? 'Match Full' : `${m.slots_left} slots remaining`}
+                      </span>
+                    </div>
+
+                    {/* Participant Avatars */}
+                    {m.participants && m.participants.length > 0 && (
+                      <div className="pt-2 flex items-center gap-1.5 overflow-x-auto">
+                        {m.participants.slice(0, 6).map((p, i) => (
+                          <div
+                            key={p.id || i}
+                            title={p.full_name}
+                            className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 text-[10px] font-extrabold flex items-center justify-center border-2 border-white shadow-2xs shrink-0"
+                          >
+                            {p.full_name?.charAt(0) || 'P'}
+                          </div>
+                        ))}
+                        {m.participants.length > 6 && (
+                          <span className="text-[10px] text-slate-400 font-semibold">
+                            +{m.participants.length - 6} more
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
 
-                  {/* Date & Time pill */}
-                  <div className="flex items-center gap-3 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg">
-                    <span className="font-semibold">{m.match_date}</span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {m.start_time} - {m.end_time}
-                    </span>
-                  </div>
-
-                  {/* Player Capacity Bar */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5 text-slate-400" />
-                        Players Registered
-                      </span>
-                      <span className="font-bold text-slate-900">
-                        {m.current_players} / {m.max_players}
-                      </span>
+                  {/* Footer Action */}
+                  <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <div>
+                      <span className="text-sm font-extrabold text-slate-900">₹{m.price_per_player}</span>
+                      <span className="text-[11px] text-slate-400"> / player</span>
                     </div>
 
-                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          isFull ? 'bg-rose-500' : 'bg-brand-600'
-                        }`}
-                        style={{ width: `${Math.min(100, (m.current_players / m.max_players) * 100)}%` }}
-                      />
-                    </div>
-                    
-                    <span className="text-[10px] text-slate-400 block text-right">
-                      {isFull ? 'Match Full' : `${m.slots_left} slots remaining`}
-                    </span>
-                  </div>
-
-                  {/* Participant Avatars */}
-                  {m.participants && m.participants.length > 0 && (
-                    <div className="pt-2 flex items-center gap-1.5 overflow-x-auto">
-                      {m.participants.slice(0, 6).map((p, i) => (
-                        <div
-                          key={p.id || i}
-                          title={p.full_name}
-                          className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 text-[10px] font-extrabold flex items-center justify-center border-2 border-white shadow-2xs shrink-0"
-                        >
-                          {p.full_name?.charAt(0) || 'P'}
-                        </div>
-                      ))}
-                      {m.participants.length > 6 && (
-                        <span className="text-[10px] text-slate-400 font-semibold">
-                          +{m.participants.length - 6} more
+                    {alreadyJoined ? (
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" /> Joined
                         </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer Action */}
-                <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-                  <div>
-                    <span className="text-sm font-extrabold text-slate-900">₹{m.price_per_player}</span>
-                    <span className="text-[11px] text-slate-400"> / player</span>
+                        {!isCreator && !timeIsUp && (
+                          <button
+                            onClick={() => openLeaveConfirmation(m)}
+                            className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold border border-rose-200 transition"
+                          >
+                            Cancel Participation
+                          </button>
+                        )}
+                        {!isCreator && timeIsUp && (
+                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-xs font-bold border border-slate-200">
+                            Match Concluded
+                          </span>
+                        )}
+                      </div>
+                    ) : isFull ? (
+                      <button
+                        disabled
+                        className="px-4 py-2 bg-slate-100 text-slate-400 text-xs font-bold rounded-lg cursor-not-allowed"
+                      >
+                        Match Full
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => openJoinConfirmation(m)}
+                        className="px-5 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg shadow-sm transition"
+                      >
+                        Join Match (₹{m.price_per_player})
+                      </button>
+                    )}
                   </div>
-
-                  {alreadyJoined ? (
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5 text-emerald-600" /> Joined
-                      </span>
-                      {!isCreator && (
-                        <button
-                          onClick={() => openLeaveConfirmation(m)}
-                          className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold border border-rose-200 transition"
-                        >
-                          Cancel Participation
-                        </button>
-                      )}
-                    </div>
-                  ) : isFull ? (
-                    <button
-                      disabled
-                      className="px-4 py-2 bg-slate-100 text-slate-400 text-xs font-bold rounded-lg cursor-not-allowed"
-                    >
-                      Match Full
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => openJoinConfirmation(m)}
-                      className="px-5 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg shadow-sm transition"
-                    >
-                      Join Match (₹{m.price_per_player})
-                    </button>
-                  )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Double Confirmation Modal for Joining */}
       {confirmJoinMatch && (

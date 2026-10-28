@@ -13,6 +13,31 @@ import {
   ChevronRight
 } from 'lucide-react';
 
+const isBookingInPast = (bookingDate, startTime) => {
+  if (!bookingDate) return false;
+  try {
+    const now = new Date();
+    const [y, m, d] = bookingDate.split('-').map(Number);
+    if (!y || !m || !d) return false;
+    let hours = 23, minutes = 59;
+    if (startTime) {
+      const match = startTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+      if (match) {
+        hours = parseInt(match[1], 10);
+        minutes = parseInt(match[2], 10);
+        const meridian = match[3];
+        if (meridian) {
+          if (meridian.toUpperCase() === 'PM' && hours < 12) hours += 12;
+          if (meridian.toUpperCase() === 'AM' && hours === 12) hours = 0;
+        }
+      }
+    }
+    return new Date(y, m - 1, d, hours, minutes) <= now;
+  } catch {
+    return false;
+  }
+};
+
 const MyBookingsPage = ({ onOpenAuth }) => {
   const { isAuthenticated } = useAuth();
   const [bookings, setBookings] = useState([]);
@@ -23,6 +48,7 @@ const MyBookingsPage = ({ onOpenAuth }) => {
   const [reviewSuccess, setReviewSuccess] = useState('');
   const [cancelModalBooking, setCancelModalBooking] = useState(null);
   const [cancelReason, setCancelReason] = useState('Schedule change');
+  const [cancelError, setCancelError] = useState('');
 
   const fetchBookings = async () => {
     if (!isAuthenticated) return;
@@ -64,11 +90,13 @@ const MyBookingsPage = ({ onOpenAuth }) => {
 
   const handleCancelBooking = async () => {
     try {
+      setCancelError('');
       await bookingsAPI.cancel(cancelModalBooking.id, cancelReason);
       setCancelModalBooking(null);
       fetchBookings();
     } catch (err) {
       console.error("Cancel booking error", err);
+      setCancelError(err.response?.data?.detail || "Could not cancel booking.");
     }
   };
 
@@ -110,96 +138,113 @@ const MyBookingsPage = ({ onOpenAuth }) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {bookings.map((bk) => (
-            <div
-              key={bk.id}
-              className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-brand-700">
-                      {bk.booking_reference}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      bk.status === 'CONFIRMED'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : bk.status === 'CANCELLED'
-                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {bk.status}
-                    </span>
+          {bookings.map((bk) => {
+            const isPast = bk.is_past !== undefined ? bk.is_past : isBookingInPast(bk.booking_date, bk.start_time);
+            const canCancel = (bk.can_cancel !== undefined ? bk.can_cancel : !isPast) && bk.status === 'CONFIRMED' && !isPast;
+
+            return (
+              <div
+                key={bk.id}
+                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-brand-700">
+                        {bk.booking_reference}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        bk.status === 'CONFIRMED'
+                          ? isPast
+                            ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : bk.status === 'CANCELLED'
+                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {bk.status === 'CONFIRMED' && isPast ? 'COMPLETED' : bk.status}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => window.print()}
+                      className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-medium flex items-center gap-1 transition"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Receipt</span>
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => window.print()}
-                    className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-medium flex items-center gap-1 transition"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Receipt</span>
-                  </button>
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">{bk.turf_name}</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">{bk.ground_name}</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-xl">
                   <div>
-                    <span className="text-[10px] uppercase font-semibold text-slate-400 block">Date</span>
-                    <span className="font-bold text-slate-800">{bk.booking_date}</span>
+                    <h3 className="font-bold text-slate-900 text-sm">{bk.turf_name}</h3>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">{bk.ground_name}</p>
                   </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-semibold text-slate-400 block">Time Slot</span>
-                    <span className="font-bold text-slate-800">{bk.start_time} - {bk.end_time}</span>
-                  </div>
-                </div>
 
-                {bk.equipment_rentals && bk.equipment_rentals.length > 0 && (
-                  <div className="p-2.5 rounded-xl bg-brand-50/50 border border-brand-100 text-[11px] space-y-1">
-                    <span className="font-bold text-brand-800 flex items-center gap-1">
-                      <span>🎽</span> Rented Equipment ({bk.equipment_rentals.length}):
-                    </span>
-                    <div className="space-y-0.5 text-slate-700 pl-4">
-                      {bk.equipment_rentals.map((r, i) => (
-                        <div key={i} className="flex justify-between items-center text-[10px]">
-                          <span>{r.quantity}x {r.name}</span>
-                          <span className="font-semibold text-slate-900">+₹{r.total_price}</span>
-                        </div>
-                      ))}
+                  <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-xl">
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-400 block">Date</span>
+                      <span className="font-bold text-slate-800">{bk.booking_date}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-400 block">Time Slot</span>
+                      <span className="font-bold text-slate-800">{bk.start_time} - {bk.end_time}</span>
                     </div>
                   </div>
-                )}
 
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-slate-600">Total Paid:</span>
-                  <span className="text-sm font-extrabold text-slate-900">₹{bk.final_amount}</span>
+                  {bk.equipment_rentals && bk.equipment_rentals.length > 0 && (
+                    <div className="p-2.5 rounded-xl bg-brand-50/50 border border-brand-100 text-[11px] space-y-1">
+                      <span className="font-bold text-brand-800 flex items-center gap-1">
+                        <span>🎽</span> Rented Equipment ({bk.equipment_rentals.length}):
+                      </span>
+                      <div className="space-y-0.5 text-slate-700 pl-4">
+                        {bk.equipment_rentals.map((r, i) => (
+                          <div key={i} className="flex justify-between items-center text-[10px]">
+                            <span>{r.quantity}x {r.name}</span>
+                            <span className="font-semibold text-slate-900">+₹{r.total_price}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="text-slate-600">Total Paid:</span>
+                    <span className="text-sm font-extrabold text-slate-900">₹{bk.final_amount}</span>
+                  </div>
+                </div>
+
+                <div className="pt-4 mt-3 border-t border-slate-100 flex items-center gap-2">
+                  {bk.status === 'CONFIRMED' && (
+                    <>
+                      <button
+                        onClick={() => setSelectedBookingForReview(bk)}
+                        className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-brand-800 text-xs font-bold rounded-lg border border-brand-200 transition flex items-center justify-center gap-1.5"
+                      >
+                        <Star className="w-3.5 h-3.5 fill-brand-600 text-brand-600" />
+                        Leave Review
+                      </button>
+                      {canCancel && (
+                        <button
+                          onClick={() => {
+                            setCancelError('');
+                            setCancelModalBooking(bk);
+                          }}
+                          className="py-2 px-3 bg-white hover:bg-rose-50 text-rose-600 text-xs font-semibold rounded-lg border border-slate-200 hover:border-rose-200 transition"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {!canCancel && isPast && (
+                        <span className="py-2 px-3 text-[11px] font-bold text-slate-400 bg-slate-100 rounded-lg select-none">
+                          Completed
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
-
-              <div className="pt-4 mt-3 border-t border-slate-100 flex items-center gap-2">
-                {bk.status === 'CONFIRMED' && (
-                  <>
-                    <button
-                      onClick={() => setSelectedBookingForReview(bk)}
-                      className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-brand-800 text-xs font-bold rounded-lg border border-brand-200 transition flex items-center justify-center gap-1.5"
-                    >
-                      <Star className="w-3.5 h-3.5 fill-brand-600 text-brand-600" />
-                      Leave Review
-                    </button>
-                    <button
-                      onClick={() => setCancelModalBooking(bk)}
-                      className="py-2 px-3 bg-white hover:bg-rose-50 text-rose-600 text-xs font-semibold rounded-lg border border-slate-200 hover:border-rose-200 transition"
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -278,6 +323,13 @@ const MyBookingsPage = ({ onOpenAuth }) => {
             <p className="text-xs text-slate-500 mb-4">
               Booking {cancelModalBooking.booking_reference} ({cancelModalBooking.booking_date}). Slots will be released back to the schedule.
             </p>
+
+            {cancelError && (
+              <div className="p-3 mb-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{cancelError}</span>
+              </div>
+            )}
 
             <div className="space-y-3 text-xs">
               <div>

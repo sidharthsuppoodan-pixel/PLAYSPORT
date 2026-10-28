@@ -18,6 +18,31 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
+const isMatchTimeUp = (matchDate, startTime) => {
+  if (!matchDate) return false;
+  try {
+    const now = new Date();
+    const [y, m, d] = matchDate.split('-').map(Number);
+    if (!y || !m || !d) return false;
+    let hours = 23, minutes = 59;
+    if (startTime) {
+      const match = startTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+      if (match) {
+        hours = parseInt(match[1], 10);
+        minutes = parseInt(match[2], 10);
+        const meridian = match[3];
+        if (meridian) {
+          if (meridian.toUpperCase() === 'PM' && hours < 12) hours += 12;
+          if (meridian.toUpperCase() === 'AM' && hours === 12) hours = 0;
+        }
+      }
+    }
+    return new Date(y, m - 1, d, hours, minutes) <= now;
+  } catch {
+    return false;
+  }
+};
+
 const HomePage = ({ onOpenAuth }) => {
   const navigate = useNavigate();
   const { user, isAdmin, isOwner } = useAuth();
@@ -42,7 +67,10 @@ const HomePage = ({ onOpenAuth }) => {
           openMatchesAPI.getAll()
         ]);
         setPopularTurfs(turfsRes.data);
-        setOpenMatches(matchesRes.data.slice(0, 3));
+        const activeMatches = (matchesRes.data || []).filter(
+          m => m.status !== 'COMPLETED' && m.status !== 'CANCELLED' && !isMatchTimeUp(m.match_date, m.start_time)
+        );
+        setOpenMatches(activeMatches.slice(0, 3));
       } catch (err) {
         console.error("Error fetching homepage data", err);
       } finally {
