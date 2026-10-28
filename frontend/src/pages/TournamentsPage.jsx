@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { tournamentsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import PaymentModal from '../components/PaymentModal';
 import { 
   Trophy, 
   Calendar, 
@@ -19,6 +20,8 @@ const TournamentsPage = ({ onOpenAuth }) => {
   const [loading, setLoading] = useState(true);
   const [registeringTourn, setRegisteringTourn] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [tournamentOrderDetails, setTournamentOrderDetails] = useState(null);
   const [teamForm, setTeamForm] = useState({
     team_name: '',
     captain_name: '',
@@ -45,18 +48,47 @@ const TournamentsPage = ({ onOpenAuth }) => {
   }, []);
 
   const validatePhone = (phone) => {
-    if (!phone) return "Phone number is required.";
-    const clean = phone.trim().replace(/\D/g, '');
+    if (!phone || !phone.trim()) return "Captain's mobile number is required.";
+    let clean = phone.trim().replace(/\D/g, '');
+    if (clean.startsWith('91') && clean.length > 10) clean = clean.slice(2);
+    if (clean.startsWith('0') && clean.length > 10) clean = clean.slice(1);
+
     if (clean.length !== 10) {
-      return "Phone number must be exactly 10 digits.";
+      return "Mobile number must be exactly 10 digits.";
     }
     if (!/^[6-9]/.test(clean)) {
-      return "10-digit mobile number must start with 6, 7, 8, or 9.";
+      return "Indian mobile numbers must start with 6, 7, 8, or 9.";
+    }
+    if (/^(\d)\1{9}$/.test(clean)) {
+      return "Mobile number cannot consist of all identical digits.";
     }
     if (/^(\d)\1{6}/.test(clean)) {
       return "The first 7 digits cannot be the same number.";
     }
+    if (/(\d)\1{6,}/.test(clean)) {
+      return "Mobile number cannot have more than 6 consecutive repetitive digits.";
+    }
     return "";
+  };
+
+  const handlePhoneChange = (e) => {
+    let raw = e.target.value.replace(/\D/g, '');
+    if (raw.startsWith('91') && raw.length > 10) raw = raw.slice(2);
+    if (raw.startsWith('0') && raw.length > 10) raw = raw.slice(1);
+    const val = raw.slice(0, 10);
+    
+    setTeamForm(prev => ({ ...prev, contact_phone: val }));
+
+    if (val.length === 0) {
+      setFormErrors(prev => ({ ...prev, contact_phone: "Mobile number is required." }));
+    } else if (val.length > 0 && !/^[6-9]/.test(val)) {
+      setFormErrors(prev => ({ ...prev, contact_phone: "Indian mobile numbers must start with 6, 7, 8, or 9." }));
+    } else if (val.length === 10) {
+      const err = validatePhone(val);
+      setFormErrors(prev => ({ ...prev, contact_phone: err }));
+    } else {
+      setFormErrors(prev => ({ ...prev, contact_phone: "" }));
+    }
   };
 
   const validateCaptain = (name) => {
@@ -79,6 +111,14 @@ const TournamentsPage = ({ onOpenAuth }) => {
       return "Team name cannot consist solely of numbers or symbols.";
     }
     return "";
+  };
+
+  const handleTournamentPaymentSuccess = (data) => {
+    setPaymentModalOpen(false);
+    setRegisteringTourn(null);
+    setSuccessMsg(data.message || `Team registered successfully with verified payment!`);
+    fetchTournaments();
+    setTimeout(() => setSuccessMsg(''), 5000);
   };
 
   const handleRegisterTeamSubmit = async (e) => {
@@ -109,6 +149,26 @@ const TournamentsPage = ({ onOpenAuth }) => {
       return;
     }
 
+    let cleanPhone = teamForm.contact_phone.trim().replace(/\D/g, '');
+    if (cleanPhone.startsWith('91') && cleanPhone.length > 10) cleanPhone = cleanPhone.slice(2);
+    if (cleanPhone.startsWith('0') && cleanPhone.length > 10) cleanPhone = cleanPhone.slice(1);
+    cleanPhone = cleanPhone.slice(0, 10);
+
+    // If tournament has entry fee, open payment modal
+    if (Number(registeringTourn.entry_fee) > 0) {
+      setTournamentOrderDetails({
+        totalAmount: Number(registeringTourn.entry_fee),
+        title: `Tournament: ${registeringTourn.title}`,
+        tournamentId: registeringTourn.id,
+        teamName: teamForm.team_name.trim(),
+        captainName: teamForm.captain_name.trim(),
+        contactPhone: cleanPhone,
+        membersCount: Number(teamForm.members_count) || 7
+      });
+      setPaymentModalOpen(true);
+      return;
+    }
+
     setSubmitting(true);
     setFormErrors({});
     setErrorMsg('');
@@ -117,7 +177,7 @@ const TournamentsPage = ({ onOpenAuth }) => {
       const payload = {
         team_name: teamForm.team_name.trim(),
         captain_name: teamForm.captain_name.trim(),
-        contact_phone: teamForm.contact_phone.trim().replace(/[\s\-()]/g, ''),
+        contact_phone: cleanPhone,
         members_count: Number(teamForm.members_count) || 7,
       };
       const res = await tournamentsAPI.registerTeam(registeringTourn.id, payload);
@@ -241,10 +301,17 @@ const TournamentsPage = ({ onOpenAuth }) => {
                     if (!isAuthenticated) {
                       onOpenAuth('login');
                     } else {
+                      let prefillPhone = '';
+                      if (user?.phone) {
+                        prefillPhone = user.phone.replace(/\D/g, '');
+                        if (prefillPhone.startsWith('91') && prefillPhone.length > 10) prefillPhone = prefillPhone.slice(2);
+                        if (prefillPhone.startsWith('0') && prefillPhone.length > 10) prefillPhone = prefillPhone.slice(1);
+                        prefillPhone = prefillPhone.slice(0, 10);
+                      }
                       setTeamForm({
                         team_name: '',
-                        captain_name: '',
-                        contact_phone: '',
+                        captain_name: user?.full_name || '',
+                        contact_phone: prefillPhone,
                         members_count: 7,
                       });
                       setFormErrors({});
@@ -353,25 +420,32 @@ const TournamentsPage = ({ onOpenAuth }) => {
               {/* Captain Phone Number */}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Captain Phone Number <span className="text-rose-500">*</span>
+                  Captain Mobile Number <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  placeholder="10-digit mobile number (e.g. 9847123456)"
-                  value={teamForm.contact_phone}
-                  onChange={(e) => {
-                    // Only allow digits and cap at exactly 10 characters
-                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                    setTeamForm({ ...teamForm, contact_phone: val });
-                    const err = validatePhone(val);
-                    setFormErrors(prev => ({ ...prev, contact_phone: err }));
-                  }}
-                  className={`w-full px-3 py-2 border rounded-lg transition ${
-                    formErrors.contact_phone ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 focus:border-brand-500'
-                  }`}
-                />
+                <div className="relative flex rounded-lg shadow-2xs">
+                  <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-200 bg-slate-100 text-slate-700 font-bold text-xs select-none">
+                    🇮🇳 +91
+                  </span>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    placeholder="98471 23456"
+                    value={teamForm.contact_phone}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, '');
+                      if (val.startsWith('91') && val.length > 10) val = val.slice(2);
+                      if (val.startsWith('0') && val.length > 10) val = val.slice(1);
+                      val = val.slice(0, 10);
+                      setTeamForm(prev => ({ ...prev, contact_phone: val }));
+                      const err = validatePhone(val);
+                      setFormErrors(prev => ({ ...prev, contact_phone: err }));
+                    }}
+                    className={`flex-1 min-w-0 block w-full px-3 py-2 rounded-r-lg border text-xs font-mono font-bold tracking-wide transition ${
+                      formErrors.contact_phone ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200 focus:border-brand-500'
+                    }`}
+                  />
+                </div>
                 {formErrors.contact_phone ? (
                   <span className="text-[11px] text-rose-600 mt-1 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3 shrink-0" /> {formErrors.contact_phone}
@@ -428,14 +502,27 @@ const TournamentsPage = ({ onOpenAuth }) => {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full mt-3 py-2.5 bg-brand-700 text-white font-bold rounded-lg hover:bg-brand-800 disabled:opacity-50 transition flex items-center justify-center gap-2"
+                className="w-full mt-3 py-2.5 bg-brand-700 text-white font-bold rounded-lg hover:bg-brand-800 disabled:opacity-50 transition flex items-center justify-center gap-2 shadow-sm shadow-brand-700/25"
               >
-                {submitting ? 'Registering Squad...' : 'Confirm Team Registration'}
+                {submitting 
+                  ? 'Registering Squad...' 
+                  : registeringTourn.entry_fee > 0 
+                    ? `Proceed to Pay ₹${registeringTourn.entry_fee} & Register` 
+                    : 'Confirm Team Registration'}
               </button>
             </form>
           </div>
         </div>
       )}
+
+      {/* Tournament Registration Payment Modal */}
+      <PaymentModal
+        isOpen={paymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        type="tournament"
+        orderDetails={tournamentOrderDetails || {}}
+        onPaymentSuccess={handleTournamentPaymentSuccess}
+      />
 
     </div>
   );

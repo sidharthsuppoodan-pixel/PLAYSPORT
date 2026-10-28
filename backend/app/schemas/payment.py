@@ -64,6 +64,34 @@ class EquipmentRentalVerify(BaseModel):
     hours: int = Field(1, ge=1, le=24)
     customer_notes: Optional[str] = None
 
+class TournamentOrderCreate(BaseModel):
+    tournament_id: int
+    team_name: str = Field(..., min_length=2, max_length=100)
+    captain_name: str = Field(..., min_length=2, max_length=100)
+    contact_phone: str = Field(..., min_length=10, max_length=15)
+    members_count: int = Field(default=7, ge=5, le=25)
+
+class TournamentRegistrationVerify(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    payment_method: PaymentMethodEnum = PaymentMethodEnum.UPI
+    tournament_id: int
+    team_name: str
+    captain_name: str
+    contact_phone: str
+    members_count: int = 7
+
+class MatchOrderCreate(BaseModel):
+    match_id: int
+
+class MatchJoinVerify(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    payment_method: PaymentMethodEnum = PaymentMethodEnum.UPI
+    match_id: int
+
 class PaymentOut(BaseModel):
     id: int
     booking_id: Optional[int] = None

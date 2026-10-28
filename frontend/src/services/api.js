@@ -137,6 +137,10 @@ export const paymentsAPI = {
   verifyTurfBooking: (data) => api.post('/payments/razorpay/verify-turf-booking', data),
   createEquipmentOrder: (data) => api.post('/payments/razorpay/create-equipment-order', data),
   verifyEquipmentRental: (data) => api.post('/payments/razorpay/verify-equipment-rental', data),
+  createTournamentOrder: (data) => api.post('/payments/razorpay/create-tournament-order', data),
+  verifyTournamentRegistration: (data) => api.post('/payments/razorpay/verify-tournament-registration', data),
+  createMatchOrder: (data) => api.post('/payments/razorpay/create-match-order', data),
+  verifyMatchJoin: (data) => api.post('/payments/razorpay/verify-match-join', data),
   getReceipt: (bookingId) => api.get(`/payments/receipt/${bookingId}`),
   verifyMock: (data) => api.post('/payments/verify-mock', data),
 };

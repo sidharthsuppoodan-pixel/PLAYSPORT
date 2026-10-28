@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { openMatchesAPI, turfsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import PaymentModal from '../components/PaymentModal';
 import { 
   Trophy, 
   Users, 
@@ -26,6 +27,8 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [confirmJoinMatch, setConfirmJoinMatch] = useState(null);
   const [confirmLeaveMatch, setConfirmLeaveMatch] = useState(null);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [matchOrderDetails, setMatchOrderDetails] = useState(null);
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -84,9 +87,33 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
     setConfirmJoinMatch(match);
   };
 
+  const handleMatchPaymentSuccess = (data) => {
+    setPaymentModalOpen(false);
+    setConfirmJoinMatch(null);
+    setSuccessMsg(data.message || 'Payment confirmed! Successfully joined the match.');
+    fetchMatches();
+    setTimeout(() => setSuccessMsg(''), 5000);
+  };
+
   const handleConfirmJoin = async () => {
     if (!confirmJoinMatch) return;
     const matchId = confirmJoinMatch.id;
+
+    // If match requires payment, open PaymentModal
+    if (Number(confirmJoinMatch.price_per_player) > 0) {
+      setMatchOrderDetails({
+        totalAmount: Number(confirmJoinMatch.price_per_player),
+        title: `Match: ${confirmJoinMatch.title}`,
+        matchId: confirmJoinMatch.id,
+        sport: confirmJoinMatch.sport_type || 'Football',
+        date: confirmJoinMatch.match_date,
+        time: `${confirmJoinMatch.start_time} - ${confirmJoinMatch.end_time}`
+      });
+      setConfirmJoinMatch(null);
+      setPaymentModalOpen(true);
+      return;
+    }
+
     setJoiningId(matchId);
     setErrorMsg('');
     setSuccessMsg('');
@@ -423,7 +450,11 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
                 disabled={joiningId === confirmJoinMatch.id}
                 className="flex-1 py-2.5 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-700/20 transition disabled:opacity-50"
               >
-                {joiningId === confirmJoinMatch.id ? 'Joining...' : `Confirm & Join (₹${confirmJoinMatch.price_per_player})`}
+                {joiningId === confirmJoinMatch.id 
+                  ? 'Joining...' 
+                  : Number(confirmJoinMatch.price_per_player) > 0 
+                    ? `Proceed to Pay ₹${confirmJoinMatch.price_per_player} & Join` 
+                    : 'Confirm & Join'}
               </button>
             </div>
           </div>
@@ -664,6 +695,15 @@ const OpenMatchesPage = ({ onOpenAuth }) => {
           </div>
         </div>
       )}
+
+      {/* Payment Modal for Match Registration */}
+      <PaymentModal
+        isOpen={paymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        type="match"
+        orderDetails={matchOrderDetails || {}}
+        onPaymentSuccess={handleMatchPaymentSuccess}
+      />
 
     </div>
   );

@@ -49,7 +49,7 @@ class TournamentOut(TournamentBase):
 class TeamRegisterRequest(BaseModel):
     team_name: str = Field(..., min_length=2, max_length=100)
     captain_name: str = Field(..., min_length=2, max_length=100)
-    contact_phone: str = Field(..., min_length=10, max_length=10)
+    contact_phone: str = Field(..., min_length=10, max_length=15)
     members_count: int = Field(default=7, ge=5, le=25)
 
     @field_validator("team_name")
@@ -75,12 +75,23 @@ class TeamRegisterRequest(BaseModel):
     @field_validator("contact_phone")
     @classmethod
     def validate_phone(cls, v: str) -> str:
-        clean = re.sub(r"\D", "", v.strip())
-        if len(clean) != 10:
-            raise ValueError("Phone number must be exactly 10 digits.")
-        if clean[0] not in "6789":
+        val_str = str(v).strip()
+        if not val_str:
+            raise ValueError("Contact mobile number is required.")
+        digits = re.sub(r"\D", "", val_str)
+        if len(digits) == 12 and digits.startswith("91"):
+            digits = digits[2:]
+        elif len(digits) == 11 and digits.startswith("0"):
+            digits = digits[1:]
+        if len(digits) != 10:
+            raise ValueError("Mobile number must be exactly 10 digits.")
+        if digits[0] not in "6789":
             raise ValueError("10-digit mobile number must begin with 6, 7, 8, or 9.")
-        if len(set(clean[:7])) == 1:
+        if len(set(digits[:7])) == 1:
             raise ValueError("The first 7 digits cannot be the same number.")
-        return clean
+        if len(set(digits)) == 1:
+            raise ValueError("Mobile number cannot consist of all identical digits.")
+        if re.search(r"(\d)\1{6,}", digits):
+            raise ValueError("Mobile number cannot have more than 6 repetitive digits.")
+        return digits
 

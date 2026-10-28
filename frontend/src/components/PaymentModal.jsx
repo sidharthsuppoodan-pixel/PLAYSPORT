@@ -11,7 +11,10 @@ import {
   Lock, 
   ArrowRight,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import { paymentsAPI } from '../services/api';
 import { loadRazorpayScript, openRazorpayCheckout } from '../services/razorpay';
@@ -20,15 +23,16 @@ import { useAuth } from '../context/AuthContext';
 const PaymentModal = ({
   isOpen,
   onClose,
-  type = 'turf', // 'turf' or 'equipment'
+  type = 'turf', // 'turf', 'equipment', 'tournament', 'match'
   orderDetails = {},
   onPaymentSuccess
 }) => {
   const { user } = useAuth();
-  const [selectedMethod, setSelectedMethod] = useState('razorpay'); // 'razorpay', 'upi_qr', 'card', 'cash'
+  const [selectedMethod, setSelectedMethod] = useState('upi_qr'); // 'upi_qr', 'razorpay', 'card', 'cash'
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [upiId, setUpiId] = useState('');
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const [utrNumber, setUtrNumber] = useState('');
   const [cardDetails, setCardDetails] = useState({
     number: '',
     name: user?.full_name || '',
@@ -41,6 +45,8 @@ const PaymentModal = ({
     if (isOpen) {
       setErrorMessage('');
       setLoading(false);
+      setCopiedUpi(false);
+      setUtrNumber('');
       // Preload Razorpay script
       loadRazorpayScript();
       // Fetch gateway configuration
@@ -52,8 +58,24 @@ const PaymentModal = ({
 
   if (!isOpen) return null;
 
-  const totalAmount = orderDetails.totalAmount || 0;
+  const totalAmount = Number(orderDetails.totalAmount) || 0;
   const isMock = razorpayConfig?.is_mock || false;
+
+  // Authentic NPCI UPI Intent URI standard
+  const upiVpa = 'playsport.arena@icici';
+  const upiPayeeName = 'PLAYSPORT Arena';
+  const transactionRef = `PS${Date.now().toString().slice(-8)}`;
+  const transactionNote = orderDetails.title || 'PLAYSPORT Sports Booking';
+  const upiIntentUri = `upi://pay?pa=${upiVpa}&pn=${encodeURIComponent(upiPayeeName)}&am=${totalAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(transactionNote)}&tr=${transactionRef}`;
+  
+  // Real dynamic scannable QR Code image URL (260x260 with high ECC)
+  const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(upiIntentUri)}`;
+
+  const handleCopyUpi = () => {
+    navigator.clipboard.writeText(upiVpa);
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2500);
+  };
 
   const handleCardNumberChange = (e) => {
     let val = e.target.value.replace(/\D/g, '').substring(0, 16);
@@ -88,8 +110,7 @@ const PaymentModal = ({
           equipment_rentals: orderDetails.equipmentRentals
         };
         res = await paymentsAPI.verifyTurfBooking(payload);
-      } else {
-        // Standalone equipment rental
+      } else if (type === 'equipment') {
         const payload = {
           razorpay_order_id: orderId,
           razorpay_payment_id: paymentId,
@@ -99,9 +120,31 @@ const PaymentModal = ({
           items: orderDetails.items,
           rental_date: orderDetails.rentalDate,
           hours: orderDetails.hours || 1,
-          customer_notes: orderDetails.customerNotes || 'Standalone equipment rental reservation'
+          customer_notes: orderDetails.customerNotes || 'Equipment rental reservation'
         };
         res = await paymentsAPI.verifyEquipmentRental(payload);
+      } else if (type === 'tournament') {
+        const payload = {
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: signature,
+          payment_method: paymentMethod || 'UPI',
+          tournament_id: orderDetails.tournamentId,
+          team_name: orderDetails.teamName,
+          captain_name: orderDetails.captainName,
+          contact_phone: orderDetails.contactPhone,
+          members_count: Number(orderDetails.membersCount) || 7
+        };
+        res = await paymentsAPI.verifyTournamentRegistration(payload);
+      } else if (type === 'match') {
+        const payload = {
+          razorpay_order_id: orderId,
+          razorpay_payment_id: paymentId,
+          razorpay_signature: signature,
+          payment_method: paymentMethod || 'UPI',
+          match_id: orderDetails.matchId
+        };
+        res = await paymentsAPI.verifyMatchJoin(payload);
       }
 
       setLoading(false);
@@ -133,12 +176,24 @@ const PaymentModal = ({
           slot_ids: orderDetails.slotIds,
           equipment_rentals: orderDetails.equipmentRentals
         });
-      } else {
+      } else if (type === 'equipment') {
         orderRes = await paymentsAPI.createEquipmentOrder({
           turf_id: orderDetails.turfId,
           items: orderDetails.items,
           rental_date: orderDetails.rentalDate,
           hours: orderDetails.hours || 1
+        });
+      } else if (type === 'tournament') {
+        orderRes = await paymentsAPI.createTournamentOrder({
+          tournament_id: orderDetails.tournamentId,
+          team_name: orderDetails.teamName,
+          captain_name: orderDetails.captainName,
+          contact_phone: orderDetails.contactPhone,
+          members_count: Number(orderDetails.membersCount) || 7
+        });
+      } else if (type === 'match') {
+        orderRes = await paymentsAPI.createMatchOrder({
+          match_id: orderDetails.matchId
         });
       }
 
@@ -172,16 +227,16 @@ const PaymentModal = ({
           }
         });
       } else if (selectedMethod === 'upi_qr') {
-        // UPI Direct Verification
+        // UPI QR verification
+        const refSuffix = utrNumber.trim() ? `_utr_${utrNumber.trim().slice(-6)}` : `_${Date.now().toString().slice(-8)}`;
         await new Promise(r => setTimeout(r, 1000));
         await executeFulfillment({
           orderId: orderData.order_id,
-          paymentId: `pay_upi_${Date.now().toString().slice(-8)}`,
+          paymentId: `pay_upi${refSuffix}`,
           signature: 'mock_signature_verified',
           paymentMethod: 'UPI'
         });
       } else if (selectedMethod === 'card') {
-        // Card validation
         if (cardDetails.number.replace(/\s/g, '').length < 16) {
           setErrorMessage('Please enter a valid 16-digit card number.');
           setLoading(false);
@@ -205,7 +260,6 @@ const PaymentModal = ({
           paymentMethod: 'CARD'
         });
       } else if (selectedMethod === 'cash') {
-        // Pay at Venue
         await new Promise(r => setTimeout(r, 600));
         await executeFulfillment({
           orderId: orderData.order_id,
@@ -217,18 +271,28 @@ const PaymentModal = ({
     } catch (err) {
       console.error('Order creation failed:', err);
       setErrorMessage(
-        err.response?.data?.detail || 'Failed to initialize payment order. Slot or equipment may be unavailable.'
+        err.response?.data?.detail || 'Failed to initialize payment order. Slot, tournament, or match may be full or unavailable.'
       );
       setLoading(false);
     }
   };
 
+  const getBadgeTitle = () => {
+    switch (type) {
+      case 'turf': return '🏟️ Turf Reservation';
+      case 'equipment': return '🎽 Sports Gear Rental';
+      case 'tournament': return '🏆 Tournament Entry Fee';
+      case 'match': return '⚽ Open Match Pass';
+      default: return '⚡ PLAYSPORT Checkout';
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden relative fade-in flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/65 backdrop-blur-xs">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden relative fade-in flex flex-col max-h-[94vh]">
         
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center shadow-xs">
               <ShieldCheck className="w-5 h-5" />
@@ -237,10 +301,10 @@ const PaymentModal = ({
               <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                 Checkout & Payment
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Razorpay Verified
+                  Secure UPI & Gateway
                 </span>
               </h3>
-              <p className="text-[11px] text-slate-500">256-bit SSL encrypted & authenticated checkout</p>
+              <p className="text-[11px] text-slate-500">256-bit SSL encrypted • Instant confirmation</p>
             </div>
           </div>
 
@@ -254,41 +318,54 @@ const PaymentModal = ({
         </div>
 
         {/* Modal Scrollable Content */}
-        <div className="p-6 overflow-y-auto space-y-5 text-xs text-slate-700">
+        <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-700">
           
           {/* Order Summary Card */}
-          <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 space-y-3">
+          <div className="rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100/60 border border-slate-200 p-4 space-y-3 shadow-2xs">
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-brand-700">
-                  {type === 'turf' ? '🏟️ Turf Reservation' : '🎽 Sports Gear Rental'}
+                  {getBadgeTitle()}
                 </span>
                 <h4 className="text-sm font-extrabold text-slate-900 mt-0.5">
-                  {orderDetails.turfName || 'PLAYSPORT Sports Arena'}
+                  {orderDetails.title || orderDetails.turfName || 'PLAYSPORT Sports Facility'}
                 </h4>
                 {orderDetails.groundName && (
                   <p className="text-[11px] text-slate-500 font-medium">{orderDetails.groundName}</p>
+                )}
+                {type === 'tournament' && orderDetails.teamName && (
+                  <p className="text-[11px] text-brand-800 font-semibold mt-0.5">
+                    Team: {orderDetails.teamName} • Capt: {orderDetails.captainName}
+                  </p>
+                )}
+                {type === 'match' && orderDetails.sport && (
+                  <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                    Sport: {orderDetails.sport} • {orderDetails.time}
+                  </p>
                 )}
               </div>
 
               <div className="text-right">
                 <span className="text-[10px] text-slate-400 font-semibold block">Total Payable</span>
-                <span className="text-lg font-black text-brand-700">₹{totalAmount.toFixed(2)}</span>
+                <span className="text-xl font-black text-brand-700">₹{totalAmount.toFixed(2)}</span>
               </div>
             </div>
 
             {/* Schedule & Items Details */}
             <div className="pt-2 border-t border-slate-200 grid grid-cols-2 gap-2 text-[11px]">
               <div>
-                <span className="text-slate-400 font-medium block">Date</span>
-                <span className="font-bold text-slate-800">{orderDetails.bookingDate || orderDetails.rentalDate || 'Today'}</span>
+                <span className="text-slate-400 font-medium block">Date / Schedule</span>
+                <span className="font-bold text-slate-800">
+                  {orderDetails.bookingDate || orderDetails.rentalDate || orderDetails.date || 'Immediate'}
+                </span>
               </div>
               <div>
-                <span className="text-slate-400 font-medium block">Schedule / Duration</span>
+                <span className="text-slate-400 font-medium block">Details</span>
                 <span className="font-bold text-slate-800">
-                  {type === 'turf' 
-                    ? `${orderDetails.slotCount || 1} Slot(s)` 
-                    : `${orderDetails.hours || 1} Hour(s) Session`}
+                  {type === 'turf' && `${orderDetails.slotCount || 1} Slot(s)`}
+                  {type === 'equipment' && `${orderDetails.hours || 1} Hr Rental`}
+                  {type === 'tournament' && `${orderDetails.membersCount || 7} Players Squad`}
+                  {type === 'match' && 'Individual Player Slot'}
                 </span>
               </div>
             </div>
@@ -296,7 +373,7 @@ const PaymentModal = ({
             {/* Equipment Add-on List if present */}
             {orderDetails.equipmentItems && orderDetails.equipmentItems.length > 0 && (
               <div className="pt-2 border-t border-slate-200 text-[11px] space-y-1">
-                <span className="font-semibold text-slate-500">Rented Gear:</span>
+                <span className="font-semibold text-slate-500">Rented Equipment:</span>
                 <div className="space-y-0.5 pl-2 text-slate-700">
                   {orderDetails.equipmentItems.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center text-[10px]">
@@ -317,7 +394,29 @@ const PaymentModal = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               
-              {/* Option 1: Razorpay Fast Checkout */}
+              {/* Option 1: Dynamic Scannable UPI QR */}
+              <button
+                type="button"
+                onClick={() => setSelectedMethod('upi_qr')}
+                className={`p-3 rounded-xl border text-left transition flex items-start gap-3 ${
+                  selectedMethod === 'upi_qr'
+                    ? 'border-emerald-500 bg-emerald-50/60 shadow-xs ring-1 ring-emerald-500'
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                }`}
+              >
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <QrCode className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-slate-900 text-xs">Scan & Pay (UPI QR)</span>
+                    <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded">Fast</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">GPay, PhonePe, Paytm, BHIM</p>
+                </div>
+              </button>
+
+              {/* Option 2: Razorpay Full Gateway */}
               <button
                 type="button"
                 onClick={() => setSelectedMethod('razorpay')}
@@ -327,36 +426,12 @@ const PaymentModal = ({
                     : 'border-slate-200 hover:border-slate-300 bg-white'
                 }`}
               >
-                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 font-bold text-xs">
-                  rzp
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 font-bold text-xs shadow-xs">
+                  R
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-900 text-xs">Razorpay Online</span>
-                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-brand-100 text-brand-800">
-                      Popular
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-0.5">UPI, GPay, PhonePe, Cards, NetBanking</p>
-                </div>
-              </button>
-
-              {/* Option 2: Direct UPI QR Code */}
-              <button
-                type="button"
-                onClick={() => setSelectedMethod('upi_qr')}
-                className={`p-3 rounded-xl border text-left transition flex items-start gap-3 ${
-                  selectedMethod === 'upi_qr'
-                    ? 'border-brand-500 bg-brand-50/50 shadow-xs ring-1 ring-brand-500'
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                  <QrCode className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="font-bold text-slate-900 text-xs block">UPI / Scan & Pay</span>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Instant QR code & UPI ID transfer</p>
+                  <span className="font-bold text-slate-900 text-xs block">Razorpay Gateway</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Cards, NetBanking, Wallets</p>
                 </div>
               </button>
 
@@ -370,16 +445,16 @@ const PaymentModal = ({
                     : 'border-slate-200 hover:border-slate-300 bg-white'
                 }`}
               >
-                <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <CreditCard className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="font-bold text-slate-900 text-xs block">Credit / Debit Card</span>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Visa, Mastercard, RuPay cards</p>
+                  <span className="font-bold text-slate-900 text-xs block">Debit / Credit Card</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Visa, Mastercard, RuPay</p>
                 </div>
               </button>
 
-              {/* Option 4: Pay at Turf Reception */}
+              {/* Option 4: Pay at Turf Reception (only for bookings) */}
               <button
                 type="button"
                 onClick={() => setSelectedMethod('cash')}
@@ -389,12 +464,12 @@ const PaymentModal = ({
                     : 'border-slate-200 hover:border-slate-300 bg-white'
                 }`}
               >
-                <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <Building2 className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="font-bold text-slate-900 text-xs block">Pay at Turf Venue</span>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Cash or POS swipe at reception</p>
+                  <span className="font-bold text-slate-900 text-xs block">Pay at Venue</span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Cash / POS at Reception</p>
                 </div>
               </button>
 
@@ -402,27 +477,133 @@ const PaymentModal = ({
           </div>
 
           {/* Dynamic Payment Option Forms */}
+
+          {/* ==================================================== */}
+          {/* OPTION 1: REAL DYNAMIC SCANNABLE UPI QR CODE         */}
+          {/* ==================================================== */}
           {selectedMethod === 'upi_qr' && (
-            <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-3">
-              <div className="flex flex-col sm:flex-row items-center gap-4">
-                <div className="w-24 h-24 bg-white p-2 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center text-center">
-                  <QrCode className="w-20 h-20 text-slate-800" />
-                </div>
-                <div className="space-y-1.5 text-center sm:text-left flex-1">
-                  <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
-                    Scan with any UPI App
+            <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Dynamic NPCI Scannable QR Code
+                </span>
+                <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                  Amount: ₹{totalAmount.toFixed(2)}
+                </span>
+              </div>
+
+              {/* QR Image and Scan Instructions */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3.5 rounded-xl border border-emerald-100 shadow-2xs">
+                <div className="relative shrink-0 flex flex-col items-center">
+                  <img
+                    src={qrCodeImageUrl}
+                    alt={`Scan to Pay ₹${totalAmount.toFixed(2)}`}
+                    className="w-40 h-40 rounded-lg border border-slate-200 shadow-xs p-1.5 bg-white object-contain"
+                  />
+                  <span className="text-[9px] font-bold text-emerald-700 mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Pre-filled ₹{totalAmount.toFixed(2)}
                   </span>
-                  <p className="font-bold text-slate-900 text-xs">
-                    UPI ID: <span className="font-mono text-brand-700">playsport.arena@upi</span>
-                  </p>
-                  <p className="text-[10px] text-slate-500">
-                    Supports Google Pay, PhonePe, Paytm, BHIM, Cred, and all Indian banking apps.
-                  </p>
                 </div>
+
+                <div className="space-y-2 text-center sm:text-left flex-1">
+                  <div>
+                    <h5 className="font-extrabold text-slate-900 text-xs">
+                      Scan with Any UPI App
+                    </h5>
+                    <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+                      Point your camera or open Google Pay, PhonePe, Paytm, or BHIM. It will directly open the payment screen with <strong>₹{totalAmount.toFixed(2)}</strong> prefilled.
+                    </p>
+                  </div>
+
+                  {/* Payee VPA Details */}
+                  <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-[11px] flex items-center justify-between">
+                    <div>
+                      <span className="text-[9px] text-slate-400 block font-semibold">Verified Payee UPI ID</span>
+                      <span className="font-mono font-bold text-brand-800">{upiVpa}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyUpi}
+                      className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-bold text-slate-700 flex items-center gap-1 transition"
+                    >
+                      {copiedUpi ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" /> Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" /> Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* App badges */}
+                  <div className="flex items-center justify-center sm:justify-start gap-1.5 text-[9px] text-slate-500 font-semibold pt-0.5">
+                    <span className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">GPay</span>
+                    <span className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">PhonePe</span>
+                    <span className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">Paytm</span>
+                    <span className="px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">BHIM</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Direct UPI Intent Link for Mobile users */}
+              <div>
+                <a
+                  href={upiIntentUri}
+                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs transition flex items-center justify-center gap-2 text-xs"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>Tap to Open in UPI App (GPay / PhonePe / Paytm)</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                </a>
+                <span className="text-[10px] text-slate-500 text-center block mt-1">
+                  On mobile phones, tapping above launches your preferred UPI app directly.
+                </span>
+              </div>
+
+              {/* Optional UTR Input */}
+              <div className="pt-2 border-t border-emerald-200/60">
+                <label className="text-[10px] font-bold text-emerald-900 block mb-1">
+                  UPI Reference / UTR Number <span className="font-normal text-slate-500">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={16}
+                  placeholder="e.g. 429810294821 (from GPay / PhonePe / Paytm)"
+                  value={utrNumber}
+                  onChange={(e) => setUtrNumber(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+            </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* OPTION 2: RAZORPAY GATEWAY CHECKOUT                  */}
+          {/* ==================================================== */}
+          {selectedMethod === 'razorpay' && (
+            <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>
+                <h5 className="font-bold text-slate-900 text-xs">Standard Razorpay Gateway</h5>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Clicking the confirmation button will launch the Razorpay interactive popup where you can complete payment using any Indian Credit/Debit Card, NetBanking (50+ banks), Razorpay dynamic QR, or UPI IDs.
+              </p>
+              <div className="flex items-center gap-2 text-[10px] text-blue-800 font-bold bg-blue-100/60 p-2 rounded-lg border border-blue-200">
+                <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-600" />
+                <span>Supports zero-fee UPI, RuPay, Visa, Mastercard, SBI, HDFC, ICICI, Axis & Wallets</span>
               </div>
             </div>
           )}
 
+          {/* ==================================================== */}
+          {/* OPTION 3: CREDIT / DEBIT CARD MANUAL FORM           */}
+          {/* ==================================================== */}
           {selectedMethod === 'card' && (
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
               <div>
@@ -471,13 +652,16 @@ const PaymentModal = ({
             </div>
           )}
 
+          {/* ==================================================== */}
+          {/* OPTION 4: PAY AT VENUE                              */}
+          {/* ==================================================== */}
           {selectedMethod === 'cash' && (
             <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
               <Building2 className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold block">Pay on Arrival</span>
                 <p className="text-[11px] text-amber-800 mt-0.5">
-                  Your reservation reference will be generated immediately. Please pay ₹{totalAmount.toFixed(2)} at the turf desk 15 minutes before your slot begins.
+                  Your reference will be created instantly. Please pay ₹{totalAmount.toFixed(2)} at the reception desk before commencement.
                 </p>
               </div>
             </div>
@@ -492,9 +676,9 @@ const PaymentModal = ({
           )}
 
           {/* Security Guarantee Notice */}
-          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-medium">
+          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-medium pt-1">
             <Lock className="w-3.5 h-3.5 text-slate-400" />
-            <span>End-to-end encrypted • Razorpay payment gateway protection</span>
+            <span>256-Bit SSL Encrypted • Direct UPI NPCI Payment Intent</span>
           </div>
 
         </div>
@@ -514,12 +698,22 @@ const PaymentModal = ({
             type="button"
             onClick={handleProceedPayment}
             disabled={loading}
-            className="flex-1 py-3 px-5 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-brand-700/25 transition flex items-center justify-center gap-2 disabled:opacity-50"
+            className={`flex-1 py-3 px-5 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50 ${
+              selectedMethod === 'upi_qr'
+                ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-600/25'
+                : 'bg-brand-700 hover:bg-brand-800 active:bg-brand-900 shadow-brand-700/25'
+            }`}
           >
             {loading ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 <span>Processing Payment...</span>
+              </>
+            ) : selectedMethod === 'upi_qr' ? (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>I Have Paid ₹{totalAmount.toFixed(2)} / Confirm</span>
+                <ArrowRight className="w-4 h-4" />
               </>
             ) : (
               <>

@@ -1,7 +1,9 @@
+import re
 import uuid
 from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -12,6 +14,8 @@ from app.models.slot import TimeSlot, SlotStatusEnum
 from app.models.ground import Ground
 from app.models.turf import Turf
 from app.models.equipment import Equipment, EquipmentRental
+from app.models.tournament import Tournament, TournamentTeam, TournamentStatusEnum
+from app.models.open_match import OpenMatch, MatchParticipant, MatchStatusEnum
 from app.models.notification import Notification, NotificationTypeEnum
 from app.models.user import User
 from app.schemas.payment import (
@@ -20,6 +24,10 @@ from app.schemas.payment import (
     RazorpayConfigOut,
     TurfOrderCreate,
     EquipmentOrderCreate,
+    TournamentOrderCreate,
+    TournamentRegistrationVerify,
+    MatchOrderCreate,
+    MatchJoinVerify,
     RazorpayOrderOut,
     TurfBookingVerify,
     EquipmentRentalVerify
@@ -538,6 +546,361 @@ def verify_equipment_rental(
         payment_id=payment.transaction_id,
         equipment_rentals=rental_outs
     )
+
+def _validate_indian_phone(phone_str: str) -> str:
+    val = str(phone_str or "").strip()
+    digits = re.sub(r"\D", "", val)
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mobile number must be exactly 10 digits.")
+    if digits[0] not in "6789":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="10-digit mobile number must begin with 6, 7, 8, or 9.")
+    if len(set(digits[:7])) == 1 or len(set(digits)) == 1 or re.search(r"(\d)\1{6,}", digits):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid mobile number format.")
+    return digits
+
+
+# ==========================================
+# TOURNAMENTS PAYMENT ENDPOINTS
+# ==========================================
+
+@router.post("/razorpay/create-tournament-order", response_model=RazorpayOrderOut)
+def create_tournament_order(
+    order_in: TournamentOrderCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Validates tournament eligibility, enforces strict Indian phone protocol,
+    and creates Razorpay order for entry fee.
+    """
+    tourn = db.query(Tournament).filter(Tournament.id == order_in.tournament_id).first()
+    if not tourn:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+
+    if tourn.status in [TournamentStatusEnum.COMPLETED, TournamentStatusEnum.CANCELLED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Registration is closed. Tournament has {tourn.status.value.lower()}."
+        )
+
+    if tourn.current_teams >= tourn.max_teams:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tournament team slots are completely full.")
+
+    # Check duplicate captain registration
+    existing_team = db.query(TournamentTeam).filter(
+        TournamentTeam.tournament_id == tourn.id,
+        TournamentTeam.captain_id == current_user.id
+    ).first()
+    if existing_team:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"You have already registered team '{existing_team.team_name}' for this tournament."
+        )
+
+    # Check duplicate team name
+    clean_team_name = order_in.team_name.strip()
+    same_team = db.query(TournamentTeam).filter(
+        TournamentTeam.tournament_id == tourn.id,
+        func.lower(TournamentTeam.team_name) == func.lower(clean_team_name)
+    ).first()
+    if same_team:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A team named '{clean_team_name}' is already registered in this tournament."
+        )
+
+    clean_phone = _validate_indian_phone(order_in.contact_phone)
+    entry_fee = float(tourn.entry_fee or 0.0)
+    receipt_code = f"TRN_{current_user.id}_{int(datetime.utcnow().timestamp())}"
+
+    rzp_order = razorpay_service.create_order(
+        amount_inr=entry_fee,
+        receipt=receipt_code,
+        notes={
+            "user_id": str(current_user.id),
+            "tournament_id": str(tourn.id),
+            "tournament_title": tourn.title,
+            "team_name": clean_team_name,
+            "captain_name": order_in.captain_name.strip(),
+            "contact_phone": clean_phone,
+            "type": "tournament_registration"
+        }
+    )
+
+    return RazorpayOrderOut(
+        order_id=rzp_order["id"],
+        amount=rzp_order["amount"],
+        currency=rzp_order["currency"],
+        key_id=rzp_order["key_id"],
+        is_mock=rzp_order["is_mock"],
+        total_amount_inr=entry_fee,
+        title=f"Registration: {tourn.title}",
+        description=f"Entry fee for team '{clean_team_name}' ({order_in.members_count} players)"
+    )
+
+
+@router.post("/razorpay/verify-tournament-registration", response_model=dict, status_code=status.HTTP_201_CREATED)
+def verify_tournament_registration(
+    verify_in: TournamentRegistrationVerify,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Verifies payment signature and commits tournament team registration atomically.
+    """
+    # 1. Cryptographic HMAC Signature Verification
+    is_valid = razorpay_service.verify_payment_signature(
+        razorpay_order_id=verify_in.razorpay_order_id,
+        razorpay_payment_id=verify_in.razorpay_payment_id,
+        razorpay_signature=verify_in.razorpay_signature
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment verification failed: Invalid cryptographic signature from Razorpay."
+        )
+
+    # 2. Lock & Validate Tournament
+    try:
+        tourn_q = db.query(Tournament).filter(Tournament.id == verify_in.tournament_id)
+        if db.bind.dialect.name != "sqlite":
+            tourn_q = tourn_q.with_for_update()
+        tourn = tourn_q.first()
+    except Exception:
+        tourn = db.query(Tournament).filter(Tournament.id == verify_in.tournament_id).first()
+
+    if not tourn:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tournament not found")
+
+    if tourn.current_teams >= tourn.max_teams:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tournament slots are full.")
+
+    # Check duplicate team
+    existing_team = db.query(TournamentTeam).filter(
+        TournamentTeam.tournament_id == tourn.id,
+        TournamentTeam.captain_id == current_user.id
+    ).first()
+    if existing_team:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already registered a team for this tournament.")
+
+    clean_phone = _validate_indian_phone(verify_in.contact_phone)
+    clean_team_name = verify_in.team_name.strip()
+    clean_captain = verify_in.captain_name.strip()
+
+    # 3. Create Tournament Team
+    team = TournamentTeam(
+        tournament_id=tourn.id,
+        captain_id=current_user.id,
+        captain_name=clean_captain,
+        team_name=clean_team_name,
+        contact_phone=clean_phone,
+        members_count=verify_in.members_count,
+        payment_status="PAID",
+        seed_number=tourn.current_teams + 1
+    )
+    db.add(team)
+    tourn.current_teams += 1
+
+    if tourn.current_teams >= tourn.max_teams:
+        tourn.status = TournamentStatusEnum.IN_PROGRESS
+
+    # 4. Create Payment Record
+    txn_id = f"TXN-TRN-{uuid.uuid4().hex[:10].upper()}"
+    payment = Payment(
+        booking_id=None,
+        user_id=current_user.id,
+        amount=tourn.entry_fee,
+        currency="INR",
+        payment_method=verify_in.payment_method,
+        transaction_id=txn_id,
+        gateway_order_id=verify_in.razorpay_order_id,
+        gateway_payment_id=verify_in.razorpay_payment_id,
+        status=PaymentStatusEnum.SUCCESS,
+        paid_at=datetime.utcnow()
+    )
+    db.add(payment)
+
+    # 5. In-app Notification
+    notif = Notification(
+        user_id=current_user.id,
+        title="Tournament Registration Confirmed! 🥇",
+        message=f"Team '{clean_team_name}' successfully registered for '{tourn.title}' with verified payment (Txn: {txn_id}).",
+        type=NotificationTypeEnum.TOURNAMENT,
+        link="/tournaments"
+    )
+    db.add(notif)
+
+    db.commit()
+    db.refresh(team)
+
+    return {
+        "message": f"Team '{clean_team_name}' successfully registered with payment for {tourn.title}!",
+        "tournament_id": tourn.id,
+        "team_id": team.id,
+        "team_name": team.team_name,
+        "captain_name": team.captain_name,
+        "contact_phone": team.contact_phone,
+        "entry_fee": tourn.entry_fee,
+        "transaction_id": txn_id,
+        "current_teams": tourn.current_teams,
+        "max_teams": tourn.max_teams
+    }
+
+
+# ==========================================
+# OPEN MATCHES PAYMENT ENDPOINTS
+# ==========================================
+
+@router.post("/razorpay/create-match-order", response_model=RazorpayOrderOut)
+def create_match_order(
+    order_in: MatchOrderCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Validates open match availability and creates Razorpay order for player participation fee.
+    """
+    match = db.query(OpenMatch).filter(OpenMatch.id == order_in.match_id).first()
+    if not match:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Open match not found")
+
+    if match.status in [MatchStatusEnum.CANCELLED, MatchStatusEnum.COMPLETED]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Match is no longer active.")
+
+    if match.current_players >= match.max_players:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Match is full. No slots remaining.")
+
+    # Check if already joined
+    existing = db.query(MatchParticipant).filter(
+        MatchParticipant.match_id == match.id,
+        MatchParticipant.user_id == current_user.id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You have already joined this match.")
+
+    price = float(match.price_per_player or 0.0)
+    receipt_code = f"MCH_{current_user.id}_{int(datetime.utcnow().timestamp())}"
+
+    rzp_order = razorpay_service.create_order(
+        amount_inr=price,
+        receipt=receipt_code,
+        notes={
+            "user_id": str(current_user.id),
+            "match_id": str(match.id),
+            "match_title": match.title,
+            "type": "match_participation"
+        }
+    )
+
+    return RazorpayOrderOut(
+        order_id=rzp_order["id"],
+        amount=rzp_order["amount"],
+        currency=rzp_order["currency"],
+        key_id=rzp_order["key_id"],
+        is_mock=rzp_order["is_mock"],
+        total_amount_inr=price,
+        title=f"Join Match: {match.title}",
+        description=f"Player participation fee ({match.sport_type} on {match.match_date})"
+    )
+
+
+@router.post("/razorpay/verify-match-join", response_model=dict, status_code=status.HTTP_201_CREATED)
+def verify_match_join(
+    verify_in: MatchJoinVerify,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Verifies payment signature and enrolls player in open match atomically.
+    """
+    is_valid = razorpay_service.verify_payment_signature(
+        razorpay_order_id=verify_in.razorpay_order_id,
+        razorpay_payment_id=verify_in.razorpay_payment_id,
+        razorpay_signature=verify_in.razorpay_signature
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment verification failed: Invalid cryptographic signature from Razorpay."
+        )
+
+    # Lock & Validate Match
+    try:
+        match_q = db.query(OpenMatch).filter(OpenMatch.id == verify_in.match_id)
+        if db.bind.dialect.name != "sqlite":
+            match_q = match_q.with_for_update()
+        match = match_q.first()
+    except Exception:
+        match = db.query(OpenMatch).filter(OpenMatch.id == verify_in.match_id).first()
+
+    if not match:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Open match not found")
+
+    if match.current_players >= match.max_players:
+        match.status = MatchStatusEnum.FULL
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Match is full.")
+
+    existing = db.query(MatchParticipant).filter(
+        MatchParticipant.match_id == match.id,
+        MatchParticipant.user_id == current_user.id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You have already joined this match.")
+
+    team_slot = "Team A" if match.current_players % 2 == 0 else "Team B"
+
+    participant = MatchParticipant(
+        match_id=match.id,
+        user_id=current_user.id,
+        team_slot=team_slot,
+        payment_status="PAID"
+    )
+    db.add(participant)
+    match.current_players += 1
+
+    if match.current_players >= match.max_players:
+        match.status = MatchStatusEnum.FULL
+
+    txn_id = f"TXN-MCH-{uuid.uuid4().hex[:10].upper()}"
+    payment = Payment(
+        booking_id=None,
+        user_id=current_user.id,
+        amount=match.price_per_player,
+        currency="INR",
+        payment_method=verify_in.payment_method,
+        transaction_id=txn_id,
+        gateway_order_id=verify_in.razorpay_order_id,
+        gateway_payment_id=verify_in.razorpay_payment_id,
+        status=PaymentStatusEnum.SUCCESS,
+        paid_at=datetime.utcnow()
+    )
+    db.add(payment)
+
+    notif = Notification(
+        user_id=current_user.id,
+        title="Joined Open Match with Confirmed Payment! 🏆",
+        message=f"You joined '{match.title}' on {match.match_date} at {match.start_time} (Txn: {txn_id}).",
+        type=NotificationTypeEnum.MATCH,
+        link="/open-matches"
+    )
+    db.add(notif)
+
+    db.commit()
+
+    return {
+        "message": f"Payment of ₹{match.price_per_player} verified! Successfully joined the match.",
+        "match_id": match.id,
+        "team_slot": team_slot,
+        "transaction_id": txn_id,
+        "current_players": match.current_players,
+        "max_players": match.max_players
+    }
+
 
 @router.post("/verify-mock", response_model=PaymentOut)
 def verify_mock_payment(
