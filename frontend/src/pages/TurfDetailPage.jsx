@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { turfsAPI, slotsAPI, reviewsAPI, bookingsAPI, equipmentAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import BookingModal from '../components/BookingModal';
+import PaymentModal from '../components/PaymentModal';
 import { 
   Star, 
   MapPin, 
@@ -36,6 +37,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Fetch Turf details & slots
@@ -118,7 +120,7 @@ const TurfDetailPage = ({ onOpenAuth }) => {
   const grandTotalPrice = slotsPrice + equipmentPrice;
   const totalEquipmentCount = Object.values(selectedEquipment).reduce((sum, q) => sum + q, 0);
 
-  const handleProceedBooking = async () => {
+  const handleProceedBooking = () => {
     if (!isAuthenticated) {
       onOpenAuth('login');
       return;
@@ -129,58 +131,34 @@ const TurfDetailPage = ({ onOpenAuth }) => {
       return;
     }
 
-    setBookingLoading(true);
     setErrorMessage('');
+    setShowPaymentModal(true);
+  };
 
-    try {
-      const groundId = turf.grounds[0].id;
-      const equipmentRentalsPayload = Object.entries(selectedEquipment)
-        .filter(([_, qty]) => qty > 0)
-        .map(([eqId, qty]) => ({
-          equipment_id: Number(eqId),
-          quantity: Number(qty)
-        }));
+  const handlePaymentSuccess = (bookingData) => {
+    setConfirmedBooking(bookingData);
+    setShowConfirmModal(true);
+    
+    // Update slots status locally
+    if (activeDateGroup) {
+      activeDateGroup.slots.forEach(s => {
+        if (selectedSlotIds.includes(s.id)) {
+          s.status = 'BOOKED';
+        }
+      });
+    }
+    setSelectedSlotIds([]);
+    setSelectedEquipment({});
 
-      const payload = {
-        turf_id: turf.id,
-        ground_id: groundId,
-        booking_date: activeDateGroup.date,
-        slot_ids: selectedSlotIds,
-        payment_method: 'UPI',
-        customer_notes: 'Booked via PLAYSPORT web portal',
-        equipment_rentals: equipmentRentalsPayload.length > 0 ? equipmentRentalsPayload : undefined
-      };
-
-      const res = await bookingsAPI.create(payload);
-      setConfirmedBooking(res.data);
-      setShowConfirmModal(true);
-      
-      // Update slots status locally
-      if (activeDateGroup) {
-        activeDateGroup.slots.forEach(s => {
-          if (selectedSlotIds.includes(s.id)) {
-            s.status = 'BOOKED';
-          }
-        });
-      }
-      setSelectedSlotIds([]);
-      setSelectedEquipment({});
-
-      // Update equipment available quantities locally
-      if (equipmentRentalsPayload.length > 0) {
-        setEquipmentList(prev => prev.map(eq => {
-          const rented = equipmentRentalsPayload.find(r => r.equipment_id === eq.id);
-          if (rented) {
-            return { ...eq, available_quantity: Math.max(0, eq.available_quantity - rented.quantity) };
-          }
-          return eq;
-        }));
-      }
-    } catch (err) {
-      console.error("Booking failed", err);
-      setErrorMessage(err.response?.data?.detail || "Booking failed. Slot may have been taken.");
-    } finally {
-      setBookingLoading(false);
+    // Update equipment available quantities locally
+    if (bookingData.equipment_rentals && bookingData.equipment_rentals.length > 0) {
+      setEquipmentList(prev => prev.map(eq => {
+        const rented = bookingData.equipment_rentals.find(r => r.equipment_id === eq.id);
+        if (rented) {
+          return { ...eq, available_quantity: Math.max(0, eq.available_quantity - rented.quantity) };
+        }
+        return eq;
+      }));
     }
   };
 
@@ -616,6 +594,42 @@ const TurfDetailPage = ({ onOpenAuth }) => {
         </div>
 
       </div>
+
+      {/* Razorpay & Multi-method Checkout Modal */}
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        type="turf"
+        orderDetails={{
+          turfId: turf?.id,
+          turfName: turf?.name,
+          groundId: turf?.grounds?.[0]?.id,
+          groundName: turf?.grounds?.[0]?.name,
+          bookingDate: activeDateGroup?.date,
+          slotIds: selectedSlotIds,
+          slotCount: selectedSlotIds.length,
+          totalAmount: grandTotalPrice,
+          equipmentRentals: Object.entries(selectedEquipment)
+            .filter(([_, qty]) => qty > 0)
+            .map(([eqId, qty]) => ({
+              equipment_id: Number(eqId),
+              quantity: Number(qty)
+            })),
+          equipmentItems: Object.entries(selectedEquipment)
+            .filter(([_, qty]) => qty > 0)
+            .map(([eqId, qty]) => {
+              const item = equipmentList.find(e => e.id === Number(eqId));
+              const hours = Math.max(1, selectedSlotIds.length);
+              return {
+                id: Number(eqId),
+                name: item?.name || 'Equipment',
+                quantity: qty,
+                totalPrice: (item?.price_per_hour || 0) * qty * hours
+              };
+            })
+        }}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
 
       {/* Booking Confirmation Receipt Modal */}
       <BookingModal

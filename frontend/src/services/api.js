@@ -131,4 +131,14 @@ export const reportsAPI = {
   getFacilityStatus: () => api.get('/reports/facility-status'),
 };
 
+export const paymentsAPI = {
+  getConfig: () => api.get('/payments/razorpay/config'),
+  createTurfOrder: (data) => api.post('/payments/razorpay/create-turf-order', data),
+  verifyTurfBooking: (data) => api.post('/payments/razorpay/verify-turf-booking', data),
+  createEquipmentOrder: (data) => api.post('/payments/razorpay/create-equipment-order', data),
+  verifyEquipmentRental: (data) => api.post('/payments/razorpay/verify-equipment-rental', data),
+  getReceipt: (bookingId) => api.get(`/payments/receipt/${bookingId}`),
+  verifyMock: (data) => api.post('/payments/verify-mock', data),
+};
+
 export default api;

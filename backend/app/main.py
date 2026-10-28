@@ -26,6 +26,15 @@ from app.api.reports import router as reports_router
 async def lifespan(app: FastAPI):
     # Ensure database schema is created
     Base.metadata.create_all(bind=engine)
+
+    # Safe migration: ensure payments.booking_id is nullable on live cloud databases
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE payments ALTER COLUMN booking_id DROP NOT NULL;"))
+            conn.commit()
+    except Exception:
+        pass
     
     # Ensure primary Super Admin user exists
     from app.core.database import SessionLocal

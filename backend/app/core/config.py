@@ -17,6 +17,10 @@ class Settings(BaseSettings):
         "DATABASE_URL",
         "postgresql://postgres:postgres@localhost:5432/playsport"
     )
+
+    # Razorpay Payment Gateway Configuration
+    RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "rzp_test_PLAYSPORT12345")
+    RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "playsport_razorpay_secret_test")
     
     # CORS Origins
     CORS_ORIGINS: List[str] = [
