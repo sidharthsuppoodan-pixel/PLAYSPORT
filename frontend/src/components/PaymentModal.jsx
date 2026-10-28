@@ -146,22 +146,8 @@ const PaymentModal = ({
 
       // 2. Route based on selected method
       if (selectedMethod === 'razorpay') {
-        // If razorpay mock mode is active (demo keys or offline fallback), we offer simulated immediate approval
-        if (orderData.is_mock) {
-          // Simulated instant checkout flow for developer convenience
-          await new Promise(r => setTimeout(r, 900));
-          await executeFulfillment({
-            orderId: orderData.order_id,
-            paymentId: `pay_mock_${Date.now().toString().slice(-8)}`,
-            signature: 'mock_signature_verified',
-            paymentMethod: 'UPI'
-          });
-          return;
-        }
-
-        // Live/Test Razorpay Checkout Modal
         setLoading(false);
-        openRazorpayCheckout({
+        await openRazorpayCheckout({
           orderId: orderData.order_id,
           amountPaise: orderData.amount,
           keyId: orderData.key_id,

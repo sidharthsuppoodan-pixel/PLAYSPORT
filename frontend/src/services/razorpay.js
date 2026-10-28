@@ -16,7 +16,7 @@ export const loadRazorpayScript = () => {
   });
 };
 
-export const openRazorpayCheckout = ({
+export const openRazorpayCheckout = async ({
   orderId,
   amountPaise,
   keyId,
@@ -30,8 +30,12 @@ export const openRazorpayCheckout = ({
   onDismiss
 }) => {
   if (typeof window === 'undefined' || !window.Razorpay) {
+    await loadRazorpayScript();
+  }
+
+  if (typeof window === 'undefined' || !window.Razorpay) {
     if (onFailure) {
-      onFailure(new Error('Razorpay SDK is not available in browser.'));
+      onFailure(new Error('Razorpay SDK could not be loaded. Check your internet connection.'));
     }
     return null;
   }
