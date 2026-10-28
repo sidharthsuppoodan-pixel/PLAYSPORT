@@ -1,6 +1,12 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const rawEnvUrl = typeof import.meta.env.VITE_API_URL === 'string'
+  ? import.meta.env.VITE_API_URL.replace(/[\r\n]+/g, '').trim()
+  : '';
+
+export const API_BASE_URL = rawEnvUrl
+  ? rawEnvUrl.replace(/\/+$/, '')
+  : (import.meta.env.PROD ? 'https://playsport-api.onrender.com/api' : '/api');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -18,9 +24,14 @@ api.interceptors.request.use((config) => {
   return config;
 }, (error) => Promise.reject(error));
 
-// Interceptor to handle auth expiry
+// Interceptor to handle auth expiry & protect against SPA HTML rewrite collisions
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (typeof response.data === 'string' && response.data.trim().startsWith('<!doctype')) {
+      return Promise.reject(new Error("API returned HTML document instead of JSON response."));
+    }
+    return response;
+  },
   (error) => {
     if (error.response && error.response.status === 401) {
       // If token expired, clear stale auth data if on protected endpoints

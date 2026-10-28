@@ -221,31 +221,35 @@ const OwnerDashboardPage = () => {
         equipmentAPI.getAll().catch(() => ({ data: [] }))
       ]);
 
-      const myTurfsList = turfsRes.data || [];
-      const myTurfIds = new Set(myTurfsList.map(t => Number(t.id)));
+      const myTurfsList = Array.isArray(turfsRes?.data) ? turfsRes.data : [];
+      const myTurfIds = new Set(myTurfsList.map(t => Number(t?.id)).filter(Boolean));
 
-      const filteredMatches = (matchesRes.data || []).filter(m => myTurfIds.has(Number(m.turf_id)));
-      const filteredTournaments = (tournRes.data || []).filter(t => myTurfIds.has(Number(t.turf_id)));
-      const filteredEquipment = (eqRes.data || []).filter(e => myTurfIds.has(Number(e.turf_id)));
+      const rawMatches = Array.isArray(matchesRes?.data) ? matchesRes.data : [];
+      const rawTourn = Array.isArray(tournRes?.data) ? tournRes.data : [];
+      const rawEq = Array.isArray(eqRes?.data) ? eqRes.data : [];
 
-      setMetrics(metRes.data);
-      setRecentBookings(bookRes.data || []);
-      setFacilityStatuses(facRes.data || []);
+      const filteredMatches = rawMatches.filter(m => myTurfIds.has(Number(m?.turf_id)));
+      const filteredTournaments = rawTourn.filter(t => myTurfIds.has(Number(t?.turf_id)));
+      const filteredEquipment = rawEq.filter(e => myTurfIds.has(Number(e?.turf_id)));
+
+      setMetrics(metRes?.data && typeof metRes.data === 'object' ? metRes.data : metrics);
+      setRecentBookings(Array.isArray(bookRes?.data) ? bookRes.data : []);
+      setFacilityStatuses(Array.isArray(facRes?.data) ? facRes.data : []);
       setMyTurfs(myTurfsList);
       setOpenMatchesList(filteredMatches);
       setTournamentsList(filteredTournaments);
       setEquipmentList(filteredEquipment);
 
-      if (myTurfsList.length > 0) {
+      if (myTurfsList.length > 0 && typeof myTurfsList[0] === 'object') {
         const firstTurf = myTurfsList[0];
         setSlotGenData(prev => ({
           ...prev,
-          turf_id: firstTurf.id,
-          hourly_price: firstTurf.starting_price || 1200
+          turf_id: firstTurf?.id || '',
+          hourly_price: firstTurf?.starting_price || 1200
         }));
-        setNewMatch(prev => ({ ...prev, turf_id: firstTurf.id }));
-        setNewTournament(prev => ({ ...prev, turf_id: firstTurf.id }));
-        setNewEquipment(prev => ({ ...prev, turf_id: firstTurf.id }));
+        setNewMatch(prev => ({ ...prev, turf_id: firstTurf?.id || '' }));
+        setNewTournament(prev => ({ ...prev, turf_id: firstTurf?.id || '' }));
+        setNewEquipment(prev => ({ ...prev, turf_id: firstTurf?.id || '' }));
       }
     } catch (err) {
       console.error("Owner dashboard fetch error", err);
@@ -271,9 +275,11 @@ const OwnerDashboardPage = () => {
     return ['Football', 'Cricket'];
   };
 
-  const openEditModal = (turfToEdit) => {
+  const openEditModal = (turfToEdit = null) => {
     try {
-      const turf = turfToEdit || (myTurfs && myTurfs.length > 0 ? myTurfs[0] : null) || {};
+      const turf = (turfToEdit && typeof turfToEdit === 'object' && !Array.isArray(turfToEdit))
+        ? turfToEdit
+        : (Array.isArray(myTurfs) && myTurfs.length > 0 && typeof myTurfs[0] === 'object' ? myTurfs[0] : {});
 
       // 1. Safely normalize sports_supported to a clean comma-separated string
       let normalizedSports = 'Football (5v5), Box Cricket';
@@ -286,11 +292,11 @@ const OwnerDashboardPage = () => {
       // 2. Safely normalize facilities to a clean JavaScript Array
       let normalizedFacilities = ["Free Parking", "Changing Rooms", "LED Floodlights", "Drinking Water"];
       if (Array.isArray(turf.facilities)) {
-        normalizedFacilities = turf.facilities;
+        normalizedFacilities = turf.facilities.filter(Boolean);
       } else if (typeof turf.facilities === 'string' && turf.facilities.trim()) {
         try {
           const parsed = JSON.parse(turf.facilities);
-          normalizedFacilities = Array.isArray(parsed) ? parsed : turf.facilities.split(',').map(s => s.trim()).filter(Boolean);
+          normalizedFacilities = Array.isArray(parsed) ? parsed.filter(Boolean) : turf.facilities.split(',').map(s => s.trim()).filter(Boolean);
         } catch {
           normalizedFacilities = turf.facilities.split(',').map(s => s.trim()).filter(Boolean);
         }
@@ -298,14 +304,14 @@ const OwnerDashboardPage = () => {
 
       // 3. Safely normalize image_url to a valid string
       let normalizedImage = 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80';
-      if (Array.isArray(turf.images) && turf.images.length > 0 && typeof turf.images[0] === 'string') {
-        normalizedImage = turf.images[0];
+      if (Array.isArray(turf.images) && turf.images.length > 0 && typeof turf.images[0] === 'string' && turf.images[0].trim()) {
+        normalizedImage = turf.images[0].trim();
       } else if (typeof turf.images === 'string' && turf.images.trim()) {
         if (turf.images.trim().startsWith('[')) {
           try {
             const parsed = JSON.parse(turf.images);
-            if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-              normalizedImage = parsed[0];
+            if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string' && parsed[0].trim()) {
+              normalizedImage = parsed[0].trim();
             }
           } catch {
             normalizedImage = turf.images.trim();
@@ -317,6 +323,10 @@ const OwnerDashboardPage = () => {
         normalizedImage = turf.image_url.trim();
       }
 
+      const validStartingPrice = (turf.starting_price !== undefined && turf.starting_price !== null && !isNaN(Number(turf.starting_price)))
+        ? Number(turf.starting_price)
+        : 1200;
+
       setEditingTurf({
         id: turf.id || '',
         name: turf.name || user?.business_name || (user?.full_name ? `${user.full_name}'s Sports Arena` : 'My Turf'),
@@ -325,7 +335,7 @@ const OwnerDashboardPage = () => {
         pincode: turf.pincode || '',
         contact_phone: turf.contact_phone || user?.phone || '',
         contact_email: turf.contact_email || user?.email || '',
-        starting_price: Number(turf.starting_price) || 1200,
+        starting_price: validStartingPrice,
         dimension_text: turf.dimension_text || '6000 sq ft',
         sports_supported: normalizedSports,
         facilities: normalizedFacilities,
@@ -724,7 +734,7 @@ const OwnerDashboardPage = () => {
             </div>
             <div className="min-w-0">
               <p className="text-xs font-bold text-slate-900 truncate">{user?.full_name || 'Turf Owner'}</p>
-              <p className="text-[10px] text-brand-700 font-bold truncate">🏢 {myTurfs.map(t => t.name).join(', ') || user?.business_name || 'Sports Arena'}</p>
+              <p className="text-[10px] text-brand-700 font-bold truncate">🏢 {(Array.isArray(myTurfs) ? myTurfs : []).map(t => t?.name).filter(Boolean).join(', ') || user?.business_name || 'Sports Arena'}</p>
             </div>
           </div>
         </div>
@@ -746,19 +756,18 @@ const OwnerDashboardPage = () => {
               {activeTab === 'equipment' && 'Equipment Rental Inventory'}
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Welcome back, <strong>{user?.full_name}</strong>. Managing Turf: <span className="text-brand-700 font-bold">{myTurfs.map(t => t.name).join(', ') || user?.business_name || 'My Turf'}</span>
+              Welcome back, <strong>{user?.full_name}</strong>. Managing Turf: <span className="text-brand-700 font-bold">{(Array.isArray(myTurfs) ? myTurfs : []).map(t => t?.name).filter(Boolean).join(', ') || user?.business_name || 'My Turf'}</span>
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {myTurfs.length > 0 && (
-              <button
-                onClick={() => openEditModal(myTurfs[0])}
-                className="py-2 px-3 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5"
-              >
-                ✏️ Edit Turf Profile
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => openEditModal(Array.isArray(myTurfs) && myTurfs.length > 0 ? myTurfs[0] : null)}
+              className="py-2 px-3 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              ✏️ Edit Turf Profile
+            </button>
             <button
               onClick={() => setShowManageSlotsModal(true)}
               className="py-2 px-3 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-2xs transition flex items-center gap-1.5"
@@ -913,43 +922,43 @@ const OwnerDashboardPage = () => {
               >
                 + Register New Turf
               </button>
-              {myTurfs.length > 0 && (
-                <button
-                  onClick={() => openEditModal(myTurfs[0])}
-                  className="py-2.5 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-700/20 transition flex items-center gap-2"
-                >
-                  ✏️ Edit Turf Profile
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => openEditModal(Array.isArray(myTurfs) && myTurfs.length > 0 ? myTurfs[0] : null)}
+                className="py-2.5 px-4 bg-brand-700 hover:bg-brand-800 text-white text-xs font-bold rounded-xl shadow-sm shadow-brand-700/20 transition flex items-center gap-2 cursor-pointer"
+              >
+                ✏️ Edit Turf Profile
+              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {myTurfs.map((turf) => (
-                <div key={turf.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+              {(Array.isArray(myTurfs) ? myTurfs : []).map((turf) => (
+                <div key={turf?.id || Math.random()} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
                   <div className="h-40 bg-slate-100 relative">
-                    <img src={turf.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80'} alt={turf.name} className="w-full h-full object-cover" />
+                    <img src={turf?.images?.[0] || 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80'} alt={turf?.name || 'Turf'} className="w-full h-full object-cover" />
                     <span className="absolute top-3 right-3 bg-white/90 px-2 py-0.5 rounded text-xs font-bold text-slate-800">
-                      ₹{turf.starting_price}/hr
+                      ₹{turf?.starting_price || 1200}/hr
                     </span>
                   </div>
                   <div className="p-4 space-y-2">
-                    <h3 className="font-bold text-slate-900 text-base">{turf.name}</h3>
-                    <p className="text-xs text-slate-500 flex items-center gap-1">📍 {turf.address || turf.city}</p>
+                    <h3 className="font-bold text-slate-900 text-base">{turf?.name || 'My Turf'}</h3>
+                    <p className="text-xs text-slate-500 flex items-center gap-1">📍 {turf?.address || turf?.city || 'Kerala'}</p>
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs gap-2">
                       <button
+                        type="button"
                         onClick={() => openEditModal(turf)}
-                        className="py-1 px-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-[11px] font-bold rounded-lg transition flex items-center gap-1 border border-brand-200"
+                        className="py-1 px-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-[11px] font-bold rounded-lg transition flex items-center gap-1 border border-brand-200 cursor-pointer"
                       >
                         ✏️ Edit Turf Profile
                       </button>
-                      <button onClick={() => { setSlotGenData(s => ({ ...s, turf_id: turf.id })); setShowManageSlotsModal(true); }} className="text-brand-700 font-bold hover:underline text-xs">
+                      <button type="button" onClick={() => { setSlotGenData(s => ({ ...s, turf_id: turf?.id })); setShowManageSlotsModal(true); }} className="text-brand-700 font-bold hover:underline text-xs cursor-pointer">
                         + Manage Slots
                       </button>
                     </div>
                   </div>
                 </div>
               ))}
-              {myTurfs.length === 0 && (
+              {(!Array.isArray(myTurfs) || myTurfs.length === 0) && (
                 <div className="col-span-full bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
                   <Building className="w-8 h-8 text-slate-400 mx-auto" />
                   <h3 className="text-sm font-bold text-slate-900">No Turfs Assigned</h3>
@@ -1617,7 +1626,7 @@ const OwnerDashboardPage = () => {
 
       {/* ─── MODAL 5: CREATE TOURNAMENT ─────────────────────────────────────── */}
       {showCreateTournamentModal && (() => {
-        const selectedTurfForTournament = myTurfs.find(t => t.id === Number(newTournament.turf_id)) || myTurfs[0];
+        const selectedTurfForTournament = (Array.isArray(myTurfs) ? myTurfs : []).find(t => t?.id === Number(newTournament.turf_id)) || (Array.isArray(myTurfs) && myTurfs.length > 0 ? myTurfs[0] : null);
         const availableSportsForTournament = getAvailableSportsForTurf(selectedTurfForTournament);
 
         return (
@@ -1884,15 +1893,9 @@ const OwnerDashboardPage = () => {
 
       {/* ─── MODAL 7: EDIT TURF PROFILE ───────────────────────────────────── */}
       {showEditTurfModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-lg relative fade-in max-h-[90vh] overflow-y-auto">
-            <button onClick={() => setShowEditTurfModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"><X className="w-5 h-5" /></button>
-            <h3 className="text-base font-bold text-slate-900 mb-1">Edit Turf Profile & Details</h3>
-            <p className="text-xs text-slate-500 mb-4">Update facility details, sports offered, amenities, location, and photos under your registered turf name.</p>
-            {modalSuccess && <div className="p-3 mb-3 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">{modalSuccess}</div>}
-            {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold">{modalError}</div>}
-
-            <ErrorBoundary fallback={(error, reset) => (
+        <ErrorBoundary fallback={(error, reset) => (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-lg relative fade-in">
               <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 space-y-3 my-2">
                 <p className="font-bold text-sm">Unable to render turf profile editor</p>
                 <p className="text-xs font-mono">{error?.message || 'Unexpected error'}</p>
@@ -1913,7 +1916,17 @@ const OwnerDashboardPage = () => {
                   </button>
                 </div>
               </div>
-            )}>
+            </div>
+          </div>
+        )}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 w-full max-w-lg relative fade-in max-h-[90vh] overflow-y-auto">
+              <button onClick={() => setShowEditTurfModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"><X className="w-5 h-5" /></button>
+              <h3 className="text-base font-bold text-slate-900 mb-1">Edit Turf Profile & Details</h3>
+              <p className="text-xs text-slate-500 mb-4">Update facility details, sports offered, amenities, location, and photos under your registered turf name.</p>
+              {modalSuccess && <div className="p-3 mb-3 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold">{modalSuccess}</div>}
+              {modalError && <div className="p-3 mb-3 rounded-lg bg-rose-50 text-rose-800 text-xs font-bold">{modalError}</div>}
+
               <form onSubmit={handleSaveTurfDetails} className="space-y-3.5 text-xs">
 
               {/* Registered Turf Name */}
@@ -2233,10 +2246,10 @@ const OwnerDashboardPage = () => {
                 💾 Save Turf Profile Details
               </button>
             </form>
-            </ErrorBoundary>
           </div>
         </div>
-      )}
+      </ErrorBoundary>
+    )}
 
       {/* ─── MODAL 8: DELETE OPEN MATCH CONFIRMATION ──────────────────────────── */}
       {confirmDeleteMatch && (

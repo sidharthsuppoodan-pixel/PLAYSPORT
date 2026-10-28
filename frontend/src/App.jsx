@@ -7,6 +7,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import AuthModal from './components/AuthModal';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -57,39 +58,45 @@ function AppContent() {
       <Navbar onOpenAuth={openAuth} />
       
       <main className="flex-1">
-        <Routes>
-          <Route path="/" element={<HomePage onOpenAuth={openAuth} />} />
-          <Route path="/turfs" element={<TurfListingPage onOpenAuth={openAuth} />} />
-          <Route path="/turfs/:idOrSlug" element={<TurfDetailPage onOpenAuth={openAuth} />} />
-          <Route path="/open-matches" element={<OpenMatchesPage onOpenAuth={openAuth} />} />
-          <Route path="/tournaments" element={<TournamentsPage onOpenAuth={openAuth} />} />
-          <Route path="/equipment" element={<EquipmentPage onOpenAuth={openAuth} />} />
-          <Route path="/pricing" element={<PricingPage onOpenAuth={openAuth} />} />
-          <Route path="/my-bookings" element={<MyBookingsPage onOpenAuth={openAuth} />} />
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<HomePage onOpenAuth={openAuth} />} />
+            <Route path="/turfs" element={<TurfListingPage onOpenAuth={openAuth} />} />
+            <Route path="/turfs/:idOrSlug" element={<TurfDetailPage onOpenAuth={openAuth} />} />
+            <Route path="/open-matches" element={<OpenMatchesPage onOpenAuth={openAuth} />} />
+            <Route path="/tournaments" element={<TournamentsPage onOpenAuth={openAuth} />} />
+            <Route path="/equipment" element={<EquipmentPage onOpenAuth={openAuth} />} />
+            <Route path="/pricing" element={<PricingPage onOpenAuth={openAuth} />} />
+            <Route path="/my-bookings" element={<MyBookingsPage onOpenAuth={openAuth} />} />
 
-          {/* Super Admin Dashboard */}
-          <Route
-            path="/admin/dashboard"
-            element={
-              <AdminRoute onOpenAuth={openAuth}>
-                <AdminDashboardPage />
-              </AdminRoute>
-            }
-          />
+            {/* Super Admin Dashboard */}
+            <Route
+              path="/admin/dashboard"
+              element={
+                <AdminRoute onOpenAuth={openAuth}>
+                  <ErrorBoundary>
+                    <AdminDashboardPage />
+                  </ErrorBoundary>
+                </AdminRoute>
+              }
+            />
 
-          {/* Turf Owner Dashboard */}
-          <Route
-            path="/owner/dashboard"
-            element={
-              <OwnerRoute onOpenAuth={openAuth}>
-                <OwnerDashboardPage />
-              </OwnerRoute>
-            }
-          />
+            {/* Turf Owner Dashboard */}
+            <Route
+              path="/owner/dashboard"
+              element={
+                <OwnerRoute onOpenAuth={openAuth}>
+                  <ErrorBoundary>
+                    <OwnerDashboardPage />
+                  </ErrorBoundary>
+                </OwnerRoute>
+              }
+            />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
 
       {!isDashboardRoute && <Footer />}
