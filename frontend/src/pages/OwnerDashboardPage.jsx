@@ -78,6 +78,20 @@ export const isSupportedImage = (urlOrFileName) => {
   return false;
 };
 
+export const getDefaultTournamentBanner = (sport = '') => {
+  const s = (sport || '').toLowerCase();
+  if (s.includes('cricket')) {
+    return 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('badminton')) {
+    return 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('basket')) {
+    return 'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=800&q=80';
+  }
+  return 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80';
+};
+
 const PRESET_SPORTS_GEAR = [
   { name: "FIFA Match Football (Size 5)", category: "Balls", defaultPrice: 100 },
   { name: "Futsal Low-Bounce Ball (Size 4)", category: "Balls", defaultPrice: 80 },
@@ -197,7 +211,8 @@ const OwnerDashboardPage = () => {
     max_teams: 16,
     entry_fee: 2000,
     prize_pool: 25000,
-    rules: 'Official tournament rules. Trophies & cash prize for winners.'
+    rules: 'Official tournament rules. Trophies & cash prize for winners.',
+    banner_url: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80'
   });
 
   const [newEquipment, setNewEquipment] = useState({
@@ -486,9 +501,14 @@ const OwnerDashboardPage = () => {
     setModalError('');
     try {
       const activeTurfId = Number(newTournament.turf_id) || myTurfs[0]?.id;
+      const finalBannerUrl = (newTournament.banner_url && typeof newTournament.banner_url === 'string' && newTournament.banner_url.trim())
+        ? newTournament.banner_url.trim()
+        : getDefaultTournamentBanner(newTournament.sport);
+
       const payload = {
         ...newTournament,
-        turf_id: activeTurfId
+        turf_id: activeTurfId,
+        banner_url: finalBannerUrl
       };
       await tournamentsAPI.create(payload);
       setModalSuccess("Tournament created successfully!");
@@ -1219,9 +1239,25 @@ const OwnerDashboardPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {tournamentsList.map((t) => (
                 <div key={t.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-bold text-slate-900 text-sm">{t.title}</h3>
-                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-bold">{t.format}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-xl bg-slate-900 overflow-hidden shrink-0 border border-slate-200 relative">
+                      <img
+                        src={t.banner_url || getDefaultTournamentBanner(t.sport)}
+                        alt={t.title}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = getDefaultTournamentBanner(t.sport);
+                        }}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex justify-between items-start gap-2">
+                        <h3 className="font-bold text-slate-900 text-sm truncate">{t.title}</h3>
+                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-bold shrink-0">{t.format}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium">{t.sport} Tournament</p>
+                    </div>
                   </div>
                   <div className="text-xs text-slate-600 space-y-1">
                     <p>🏆 Prize Pool: <strong className="text-emerald-600">₹{t.prize_pool}</strong></p>
@@ -1635,7 +1671,18 @@ const OwnerDashboardPage = () => {
                   </label>
                   <select
                     value={newTournament.sport}
-                    onChange={(e) => setNewTournament(prev => ({ ...prev, sport: e.target.value }))}
+                    onChange={(e) => {
+                      const nextSport = e.target.value;
+                      setNewTournament(prev => {
+                        const isCurrentDefault = !prev.banner_url ||
+                          prev.banner_url.includes('photo-1508098682722') ||
+                          prev.banner_url.includes('photo-1540747913346') ||
+                          prev.banner_url.includes('photo-1626224583764') ||
+                          prev.banner_url.includes('photo-1546519638');
+                        const nextBanner = isCurrentDefault ? getDefaultTournamentBanner(nextSport) : prev.banner_url;
+                        return { ...prev, sport: nextSport, banner_url: nextBanner };
+                      });
+                    }}
                     className="w-full px-3 py-2 border rounded-lg bg-white font-semibold text-purple-900 border-purple-200 focus:ring-2 focus:ring-purple-500"
                   >
                     {availableSportsForTournament.map((s) => (
@@ -1757,6 +1804,109 @@ const OwnerDashboardPage = () => {
                     placeholder="Specify match rules, halves duration, squad limits..."
                     className="w-full px-3 py-2 border rounded-lg"
                   />
+                </div>
+
+                {/* 8. Tournament Banner Photo */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-semibold text-slate-700 text-xs">
+                      Tournament Photo / Banner <span className="text-purple-600 font-normal">(Shown on tournament card)</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">JPG, PNG, WEBP</span>
+                  </div>
+
+                  {/* Local File Upload Button & URL input */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label className="cursor-pointer py-2 px-3 bg-purple-50 hover:bg-purple-100 border border-dashed border-purple-300 rounded-xl text-xs font-semibold text-purple-700 flex items-center justify-center gap-2 transition">
+                      <Upload className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span>Upload Photo File (.jpg, .png)</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (!file.type.startsWith('image/')) {
+                            alert("Invalid file format! Please upload an image file (JPG, PNG, WEBP).");
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            setNewTournament(prev => ({ ...prev, banner_url: ev.target.result }));
+                            setModalError('');
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+
+                    <input
+                      type="url"
+                      value={newTournament.banner_url || ''}
+                      onChange={(e) => setNewTournament(prev => ({ ...prev, banner_url: e.target.value }))}
+                      placeholder="Or paste banner image URL..."
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-mono"
+                    />
+                  </div>
+
+                  {/* Quick Preset Selector Buttons */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      Or Choose a Sport Preset:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: '⚽ Football Cup', url: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80' },
+                        { label: '🏟️ Stadium Night', url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=800&q=80' },
+                        { label: '🏏 Box Cricket', url: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800&q=80' },
+                        { label: '🏸 Badminton', url: 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=800&q=80' },
+                        { label: '🏀 Basketball', url: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=800&q=80' },
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setNewTournament(prev => ({ ...prev, banner_url: preset.url }))}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition ${
+                            newTournament.banner_url === preset.url
+                              ? 'bg-purple-100 text-purple-800 border-purple-400 ring-1 ring-purple-400 font-bold'
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live Banner Preview */}
+                  <div className="mt-2 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Live Tournament Card Preview:</span>
+                    <div className="relative aspect-[16/8] bg-slate-900 rounded-xl overflow-hidden border border-slate-200 shadow-xs">
+                      <img
+                        src={newTournament.banner_url || getDefaultTournamentBanner(newTournament.sport)}
+                        alt="Tournament Preview"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = getDefaultTournamentBanner(newTournament.sport);
+                        }}
+                        className="w-full h-full object-cover opacity-80"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+                      <div className="absolute bottom-2.5 left-3 right-3 text-white flex items-end justify-between pointer-events-none">
+                        <div>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400 block mb-0.5">
+                            {newTournament.sport || 'Football'} • {newTournament.format || 'Knockout'}
+                          </span>
+                          <h4 className="text-sm font-extrabold line-clamp-1">{newTournament.title || 'Your Tournament Cup'}</h4>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-[9px] uppercase text-slate-300 block">Prize Pool</span>
+                          <span className="text-sm font-black text-amber-400">₹{Number(newTournament.prize_pool || 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <button

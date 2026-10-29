@@ -14,6 +14,35 @@ import {
   X 
 } from 'lucide-react';
 
+export const getDefaultTournamentBanner = (sport = '') => {
+  const s = (sport || '').toLowerCase();
+  if (s.includes('cricket')) {
+    return 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('badminton')) {
+    return 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=800&q=80';
+  }
+  if (s.includes('basket')) {
+    return 'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=800&q=80';
+  }
+  return 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80';
+};
+
+export const getTournamentBanner = (t) => {
+  let url = t?.banner_url;
+  if (!url || typeof url !== 'string') {
+    return getDefaultTournamentBanner(t?.sport);
+  }
+  url = url.trim();
+  if ((url.startsWith("'") && url.endsWith("'")) || (url.startsWith('"') && url.endsWith('"'))) {
+    url = url.slice(1, -1).trim();
+  }
+  if (!url || url.toLowerCase() === 'none' || url.toLowerCase() === 'null') {
+    return getDefaultTournamentBanner(t?.sport);
+  }
+  return url;
+};
+
 const TournamentsPage = ({ onOpenAuth }) => {
   const { user, isAuthenticated } = useAuth();
   const [tournaments, setTournaments] = useState([]);
@@ -246,8 +275,12 @@ const TournamentsPage = ({ onOpenAuth }) => {
               <div>
                 <div className="relative aspect-[16/8] bg-slate-900 overflow-hidden">
                   <img
-                    src={t.banner_url || 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80'}
+                    src={getTournamentBanner(t)}
                     alt={t.title}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = getDefaultTournamentBanner(t.sport);
+                    }}
                     className="w-full h-full object-cover opacity-80"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />

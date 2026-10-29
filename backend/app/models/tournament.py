@@ -33,7 +33,7 @@ class Tournament(Base):
     prize_pool = Column(Float, default=25000.0)
     
     status = Column(Enum(TournamentStatusEnum), default=TournamentStatusEnum.REGISTRATION_OPEN, nullable=False)
-    banner_url = Column(String(255), nullable=True)
+    banner_url = Column(Text, nullable=True)
     rules = Column(Text, default="Standard tournament rules apply. 15-minute halves.")
     
     created_at = Column(DateTime, default=datetime.utcnow)

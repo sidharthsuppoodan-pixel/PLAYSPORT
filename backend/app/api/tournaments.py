@@ -12,6 +12,32 @@ from app.schemas.tournament import TournamentCreate, TournamentOut, TournamentTe
 
 router = APIRouter(prefix="/tournaments", tags=["Tournaments"])
 
+def sanitize_banner_url(url: Optional[str], sport: Optional[str] = None) -> str:
+    default_football = "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80"
+    default_cricket = "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?auto=format&fit=crop&w=800&q=80"
+    default_badminton = "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=800&q=80"
+    default_basketball = "https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=800&q=80"
+
+    def_url = default_football
+    if sport:
+        s_lower = sport.lower()
+        if "cricket" in s_lower:
+            def_url = default_cricket
+        elif "badminton" in s_lower:
+            def_url = default_badminton
+        elif "basket" in s_lower:
+            def_url = default_basketball
+
+    if not url:
+        return def_url
+
+    cleaned = str(url).strip()
+    if (cleaned.startswith("'") and cleaned.endswith("'")) or (cleaned.startswith('"') and cleaned.endswith('"')):
+        cleaned = cleaned[1:-1].strip()
+    if not cleaned or cleaned.lower() in ("none", "null", "undefined"):
+        return def_url
+    return cleaned
+
 @router.get("", response_model=List[TournamentOut])
 def list_tournaments(
     sport: Optional[str] = Query(None),
@@ -57,7 +83,7 @@ def list_tournaments(
             prize_pool=t.prize_pool,
             status=t.status,
             rules=t.rules,
-            banner_url=t.banner_url,
+            banner_url=sanitize_banner_url(t.banner_url, t.sport),
             turf_name=turf.name if turf else "PlayZone Arena",
             turf_city=turf.city if turf else "Kochi",
             created_at=t.created_at,
@@ -114,6 +140,8 @@ def create_tournament(
             turf.sports_supported = f"{turf.sports_supported}, {tourn_in.sport}"
             db.flush()
 
+    final_banner_url = sanitize_banner_url(tourn_in.banner_url, tourn_in.sport)
+
     tourn = Tournament(
         turf_id=tourn_in.turf_id,
         creator_id=current_user.id,
@@ -129,7 +157,7 @@ def create_tournament(
         prize_pool=tourn_in.prize_pool,
         status=TournamentStatusEnum.REGISTRATION_OPEN,
         rules=tourn_in.rules,
-        banner_url=tourn_in.banner_url
+        banner_url=final_banner_url
     )
     db.add(tourn)
     db.commit()
@@ -150,7 +178,7 @@ def create_tournament(
         prize_pool=tourn.prize_pool,
         status=tourn.status,
         rules=tourn.rules,
-        banner_url=tourn.banner_url,
+        banner_url=final_banner_url,
         turf_name=turf.name,
         turf_city=turf.city,
         created_at=tourn.created_at,
